@@ -83,6 +83,8 @@ function weekRange(startDate: string, weekIndex: number, repeatsBefore: number) 
   return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 export const planRoutes = new Hono<AppEnv>()
   .use('*', requireAuth)
 
@@ -116,7 +118,7 @@ export const planRoutes = new Hono<AppEnv>()
       .object({
         minutesRun: z.number().min(0).max(120),
         stopReason: z.enum(STOP_REASONS),
-        date: z.string().optional(),
+        date: z.string().regex(ISO_DATE).optional(),
       })
       .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'Invalid baseline' }, 400);
@@ -130,7 +132,11 @@ export const planRoutes = new Hono<AppEnv>()
 
   .post('/generate', async (c) => {
     const userId = c.get('userId');
-    const body = z.object({ startDate: z.string().optional() }).parse(await c.req.json().catch(() => ({})));
+    // safeParse, not parse: a malformed body is a 400, not an exception.
+    const body = z
+      .object({ startDate: z.string().regex(ISO_DATE).optional() })
+      .safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: 'Invalid start date' }, 400);
 
     const [profileRow] = await db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId));
     if (!profileRow) return c.json({ error: 'Complete your profile first' }, 400);
@@ -149,7 +155,9 @@ export const planRoutes = new Hono<AppEnv>()
       .limit(1);
     if (!baseline) return c.json({ error: 'Record a baseline assessment first' }, 400);
 
-    const startDate = body.startDate ?? new Date().toISOString().slice(0, 10);
+    // The user's day, not the server's — a plan generated at 2am in India must
+    // not be dated to the previous day because the box runs on UTC.
+    const startDate = body.data.startDate ?? (await todayFrom(c));
     const generated = generatePlan(
       toProfile(profileRow),
       {
@@ -360,7 +368,7 @@ export const planRoutes = new Hono<AppEnv>()
     const parsed = z
       .object({
         goal: z.enum(GOALS),
-        startDate: z.string().optional(),
+        startDate: z.string().regex(ISO_DATE).optional(),
         /** A fresh timed run, when the block is too old to continue from. */
         baseline: z
           .object({ minutesRun: z.number().min(0).max(120), stopReason: z.enum(STOP_REASONS) })

@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
 import { existsSync } from 'node:fs';
@@ -31,6 +32,11 @@ app.use(
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   }),
 );
+
+// Nothing this app accepts is large — the biggest body is a settings object.
+// Without a cap, one request can make the process allocate until systemd kills
+// it, which on a 512MB box takes very little effort.
+app.use('/api/*', bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: 'Too large' }, 413) }));
 
 // Which sign-in methods the client should offer.
 app.get('/api/config', (c) => c.json({ google: googleEnabled, devLogin: env.devLogin }));

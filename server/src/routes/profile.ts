@@ -23,7 +23,7 @@ const profileSchema = z.object({
   weightKg: z.number().min(25).max(300),
   units: z.enum(UNITS),
   dietaryPattern: z.enum(DIETARY_PATTERNS),
-  exclusions: z.array(z.string()).default([]),
+  exclusions: z.array(z.string().max(60)).max(30).default([]),
   activityLevel: z.enum(ACTIVITY_LEVELS),
   smokingStatus: z.enum(SMOKING_STATUSES),
   alcoholFrequency: z.enum(ALCOHOL_FREQUENCIES),
@@ -39,8 +39,19 @@ const settingsSchema = z.object({
   audioMode: z.enum(['transient', 'playback']).optional(),
   soundEnabled: z.boolean().optional(),
   hapticsEnabled: z.boolean().optional(),
-  trackedHabits: z.array(z.string()).optional(),
-  customHabits: z.array(z.object({ key: z.string(), label: z.string(), unit: z.string() })).optional(),
+  trackedHabits: z.array(z.string().max(40)).max(40).optional(),
+  // Capped because this lands in one settings row: without a bound a single
+  // request could store megabytes of text on a 512MB box.
+  customHabits: z
+    .array(
+      z.object({
+        key: z.string().min(1).max(40),
+        label: z.string().min(1).max(60),
+        unit: z.string().max(20),
+      }),
+    )
+    .max(20)
+    .optional(),
   smokingBaselinePerDay: z.number().min(0).max(100).nullish(),
   cigaretteCost: z.number().min(0).nullish(),
   alcoholBaselinePerWeek: z.number().min(0).max(200).nullish(),
