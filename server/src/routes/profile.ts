@@ -1,0 +1,109 @@
+import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
+import { z } from 'zod';
+import {
+  ACTIVITY_LEVELS,
+  ALCOHOL_FREQUENCIES,
+  DIETARY_PATTERNS,
+  EQUIPMENT,
+  GOALS,
+  INJURY_SITES,
+  SCREENING_FLAGS,
+  SEXES,
+  SMOKING_STATUSES,
+  UNITS,
+} from '@goodform/shared';
+import { db, schema } from '../db/index.js';
+import { requireAuth, type AppEnv } from '../middleware.js';
+
+const profileSchema = z.object({
+  age: z.number().int().min(13).max(100),
+  sexAtBirth: z.enum(SEXES),
+  heightCm: z.number().min(90).max(250),
+  weightKg: z.number().min(25).max(300),
+  units: z.enum(UNITS),
+  dietaryPattern: z.enum(DIETARY_PATTERNS),
+  exclusions: z.array(z.string()).default([]),
+  activityLevel: z.enum(ACTIVITY_LEVELS),
+  smokingStatus: z.enum(SMOKING_STATUSES),
+  alcoholFrequency: z.enum(ALCOHOL_FREQUENCIES),
+  injuryHistory: z.array(z.enum(INJURY_SITES)).default([]),
+  injuryNotes: z.string().max(500).nullish(),
+  equipment: z.array(z.enum(EQUIPMENT)).default(['none']),
+  goal: z.enum(GOALS),
+});
+
+const settingsSchema = z.object({
+  audioMode: z.enum(['transient', 'playback']).optional(),
+  soundEnabled: z.boolean().optional(),
+  hapticsEnabled: z.boolean().optional(),
+  trackedHabits: z.array(z.string()).optional(),
+  customHabits: z.array(z.object({ key: z.string(), label: z.string(), unit: z.string() })).optional(),
+  smokingBaselinePerDay: z.number().min(0).max(100).nullish(),
+  cigaretteCost: z.number().min(0).nullish(),
+  alcoholBaselinePerWeek: z.number().min(0).max(200).nullish(),
+  alcoholUnitCost: z.number().min(0).nullish(),
+  currency: z.string().max(8).optional(),
+});
+
+export const profileRoutes = new Hono<AppEnv>()
+  .use('*', requireAuth)
+
+  .get('/', async (c) => {
+    const userId = c.get('userId');
+    const [profile] = await db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId));
+    const [screening] = await db.select().from(schema.screenings).where(eq(schema.screenings.userId, userId));
+    const [userSettings] = await db.select().from(schema.settings).where(eq(schema.settings.userId, userId));
+    return c.json({ profile: profile ?? null, screening: screening ?? null, settings: userSettings ?? null });
+  })
+
+  .put('/', async (c) => {
+    const userId = c.get('userId');
+    const parsed = profileSchema.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: 'Invalid profile', issues: parsed.error.issues }, 400);
+
+    const values = { ...parsed.data, userId, updatedAt: new Date() };
+    await db
+      .insert(schema.profiles)
+      .values(values)
+      .onConflictDoUpdate({ target: schema.profiles.userId, set: values });
+
+    // Make sure a settings row exists so the client always has defaults.
+    await db.insert(schema.settings).values({ userId }).onConflictDoNothing();
+
+    return c.json({ ok: true });
+  })
+
+  .put('/settings', async (c) => {
+    const userId = c.get('userId');
+    const parsed = settingsSchema.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: 'Invalid settings', issues: parsed.error.issues }, 400);
+
+    const values = { ...parsed.data, userId, updatedAt: new Date() };
+    await db
+      .insert(schema.settings)
+      .values(values)
+      .onConflictDoUpdate({ target: schema.settings.userId, set: values });
+    return c.json({ ok: true });
+  })
+
+  .post('/screening', async (c) => {
+    const userId = c.get('userId');
+    const parsed = z
+      .object({ flags: z.array(z.enum(SCREENING_FLAGS)), acknowledged: z.boolean().default(false) })
+      .safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: 'Invalid screening' }, 400);
+
+    const values = {
+      userId,
+      flags: parsed.data.flags,
+      completedAt: new Date(),
+      acknowledgedAt: parsed.data.acknowledged ? new Date() : null,
+    };
+    await db
+      .insert(schema.screenings)
+      .values(values)
+      .onConflictDoUpdate({ target: schema.screenings.userId, set: values });
+
+    return c.json({ ok: true, needsAcknowledgement: parsed.data.flags.length > 0 && !parsed.data.acknowledged });
+  });

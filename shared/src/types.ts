@@ -1,0 +1,255 @@
+// ---------------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------------
+
+export const SEXES = ['male', 'female', 'intersex'] as const;
+export type Sex = (typeof SEXES)[number];
+
+export const UNITS = ['metric', 'imperial'] as const;
+export type Units = (typeof UNITS)[number];
+
+export const DIETARY_PATTERNS = [
+  'omnivore',
+  'no_red_meat',
+  'pescatarian',
+  'vegetarian',
+  'eggetarian',
+  'vegan',
+] as const;
+export type DietaryPattern = (typeof DIETARY_PATTERNS)[number];
+
+export const ACTIVITY_LEVELS = ['none', 'occasional_sport', 'regular_sport', 'other_cardio'] as const;
+export type ActivityLevel = (typeof ACTIVITY_LEVELS)[number];
+
+export const SMOKING_STATUSES = ['never', 'current', 'quitting', 'former'] as const;
+export type SmokingStatus = (typeof SMOKING_STATUSES)[number];
+
+export const ALCOHOL_FREQUENCIES = ['never', 'occasional', 'weekly', 'more'] as const;
+export type AlcoholFrequency = (typeof ALCOHOL_FREQUENCIES)[number];
+
+export const INJURY_SITES = ['knee', 'shin', 'ankle', 'achilles', 'hip', 'back', 'foot'] as const;
+export type InjurySite = (typeof INJURY_SITES)[number];
+
+export const EQUIPMENT = ['none', 'pull_up_bar', 'resistance_bands', 'dumbbells', 'step'] as const;
+export type Equipment = (typeof EQUIPMENT)[number];
+
+export const GOALS = [
+  'first_continuous_run',
+  'five_k',
+  'ten_k',
+  'general_fitness',
+  'return_after_break',
+] as const;
+export type Goal = (typeof GOALS)[number];
+
+export interface Profile {
+  age: number;
+  sexAtBirth: Sex;
+  heightCm: number;
+  weightKg: number;
+  units: Units;
+  dietaryPattern: DietaryPattern;
+  exclusions: string[];
+  activityLevel: ActivityLevel;
+  smokingStatus: SmokingStatus;
+  alcoholFrequency: AlcoholFrequency;
+  injuryHistory: InjurySite[];
+  injuryNotes?: string;
+  equipment: Equipment[];
+  goal: Goal;
+}
+
+// ---------------------------------------------------------------------------
+// Screening (PAR-Q+)
+// ---------------------------------------------------------------------------
+
+export const SCREENING_FLAGS = [
+  'heart_condition',
+  'chest_pain',
+  'dizziness',
+  'bone_or_joint_problem',
+  'bp_or_heart_medication',
+  'pregnancy',
+  'other_reason',
+] as const;
+export type ScreeningFlag = (typeof SCREENING_FLAGS)[number];
+
+export interface Screening {
+  flags: ScreeningFlag[];
+  completedAt: string;
+  acknowledgedAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Baseline assessment
+// ---------------------------------------------------------------------------
+
+export const STOP_REASONS = ['breath', 'legs', 'choice'] as const;
+/** Why the baseline run ended. `legs` signals a tissue limit → more conservative plan. */
+export type StopReason = (typeof STOP_REASONS)[number];
+
+export interface Baseline {
+  minutesRun: number;
+  stopReason: StopReason;
+  recordedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Plan
+// ---------------------------------------------------------------------------
+
+export interface PlanWeek {
+  /** 1-based week number within the block. */
+  index: number;
+  runSec: number;
+  walkSec: number;
+  reps: number;
+  sessionsPerWeek: number;
+  isDeload: boolean;
+  /** Total running seconds across the week: runSec * reps * sessionsPerWeek. */
+  totalRunSec: number;
+}
+
+export interface Plan {
+  goal: Goal;
+  /** 0 = standard progression, higher = slower and shorter starting intervals. */
+  conservatism: number;
+  conservatismReasons: string[];
+  startDate: string;
+  weeks: PlanWeek[];
+}
+
+export type PlanStatus = 'active' | 'paused' | 'completed' | 'abandoned';
+
+// ---------------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------------
+
+export type SessionType = 'run' | 'strength' | 'baseline';
+export type Completion = 'full' | 'partial' | 'skipped';
+
+export const DISCOMFORT_LOCATIONS = [
+  'shin',
+  'calf',
+  'knee',
+  'achilles',
+  'hip',
+  'foot',
+  'back',
+  'other',
+] as const;
+export type DiscomfortLocation = (typeof DISCOMFORT_LOCATIONS)[number];
+
+export interface Discomfort {
+  location: DiscomfortLocation;
+  severity: 1 | 2 | 3 | 4 | 5;
+}
+
+export interface WorkoutSession {
+  id: string;
+  date: string;
+  type: SessionType;
+  planWeek: number | null;
+  prescription: PlanWeek | null;
+  completion: Completion;
+  effort: number | null;
+  discomfort: Discomfort | null;
+  intervalsCompleted: number | null;
+  durationSec: number | null;
+  notes: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Gating
+// ---------------------------------------------------------------------------
+
+export type GateDecision =
+  | 'advance'
+  | 'offer_repeat'
+  | 'repeat'
+  | 'step_back'
+  | 'pause_medical';
+
+export interface GateResult {
+  decision: GateDecision;
+  /** Plain-language reason shown to the user. Never framed as failure. */
+  reason: string;
+  /** True when the user may override with a single risk explanation. */
+  overridable: boolean;
+  /** Extra strength emphasis recommended for the repeated week. */
+  strengthEmphasis: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Daily logs
+// ---------------------------------------------------------------------------
+
+export interface DailyLog {
+  date: string;
+  waterMl: number;
+  sleepHours: number | null;
+  alcoholUnits: number;
+  cigarettes: number;
+  customHabits: Record<string, number>;
+  notes: string | null;
+}
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  locale: string;
+  dietaryTags: DietaryPattern[];
+  servingLabel: string;
+  proteinG: number;
+}
+
+export interface NutritionEntry {
+  id: string;
+  date: string;
+  foodItemId: string;
+  servings: number;
+}
+
+export interface WeeklyCheck {
+  date: string;
+  weightKg: number | null;
+  waistCm: number | null;
+  restingHr: number | null;
+  capability: Record<string, number>;
+}
+
+// ---------------------------------------------------------------------------
+// Strength
+// ---------------------------------------------------------------------------
+
+export type EquipmentTier = 'bodyweight' | 'bar' | 'loaded';
+
+export interface StrengthExercise {
+  id: string;
+  name: string;
+  tier: EquipmentTier;
+  /** Muscle/tissue target, e.g. "calf + Achilles". */
+  target: string;
+  sets: number;
+  reps: string;
+  /** Explicit tempo, e.g. "3s down, 1s up" — slow eccentrics build tendon stiffness. */
+  tempo: string;
+  perSide: boolean;
+  /** Critical to running tolerance — users short on time keep these. */
+  priority: boolean;
+  cues: string[];
+  /** Injury sites for which this exercise is contraindicated. */
+  contraindicatedFor: InjurySite[];
+  /** Exercise id to swap in when contraindicated. */
+  substituteId?: string;
+}
+
+export interface MobilityItem {
+  id: string;
+  name: string;
+  /** Reps for dynamic warm-up items, seconds for static cool-down holds. */
+  amount: number;
+  unit: 'reps' | 'seconds';
+  perSide: boolean;
+  cue: string;
+}
