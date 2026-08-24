@@ -24,7 +24,16 @@ import {
   type CalendarDay,
 } from '../api/hooks.ts';
 import { shortDate, today } from '../lib/date.ts';
-import { Button, Card, Choices, Eyebrow, Field, Note, Stepper, TextInput } from '../components/ui.tsx';
+import {
+  Button,
+  Card,
+  Choices,
+  Eyebrow,
+  Field,
+  Note,
+  Stepper,
+  TextInput,
+} from '../components/ui.tsx';
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -44,7 +53,10 @@ function addMonths(date: string, delta: number): string {
 }
 
 function monthLabel(date: string): string {
-  return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  return new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 /** Monday-first column for a date, matching the weekday header. */
@@ -73,10 +85,7 @@ export function Calendar() {
   const now = today();
 
   const leading = columnOf(from);
-  const cells: (CalendarDay | null)[] = [
-    ...Array.from({ length: leading }, () => null),
-    ...days,
-  ];
+  const cells: (CalendarDay | null)[] = [...Array.from({ length: leading }, () => null), ...days];
 
   return (
     <div className="flex flex-col gap-5 pt-1">
@@ -86,8 +95,9 @@ export function Calendar() {
           Fill in the gaps
         </h1>
         <p className="mt-2 leading-relaxed text-ink-soft">
-          Anything you did but did not log can go in here. It is worth doing: the plan decides whether to advance
-          from what is logged, so an unrecorded week looks exactly like a missed one.
+          Anything you did but did not log can go in here. It is worth doing: the plan decides
+          whether to advance from what is logged, so an unrecorded week looks exactly like a missed
+          one.
         </p>
       </header>
 
@@ -120,7 +130,9 @@ export function Calendar() {
             </span>
           ))}
           {isPending
-            ? Array.from({ length: 35 }, (_, i) => <span key={i} className="h-12 rounded-lg bg-chalk-deep/40" />)
+            ? Array.from({ length: 35 }, (_, i) => (
+                <span key={i} className="h-12 rounded-lg bg-chalk-deep/40" />
+              ))
             : cells.map((day, i) =>
                 day === null ? (
                   <span key={`blank-${i}`} />
@@ -149,7 +161,10 @@ export function Calendar() {
         <DayEditor key={selected} day={byDate.get(selected)!} isFuture={selected > now} />
       )}
 
-      <Link to="/history" className="text-center text-[0.875rem] text-run underline underline-offset-4">
+      <Link
+        to="/history"
+        className="text-center text-[0.875rem] text-run underline underline-offset-4"
+      >
         See sessions in detail
       </Link>
     </div>
@@ -183,17 +198,20 @@ function DayCell({
   const strengthDone = done.some((s) => s.type === 'strength');
   const hasLog = Boolean(
     day.log &&
-      (day.log.waterMl > 0 ||
-        day.log.sleepHours !== null ||
-        day.log.cigarettes > 0 ||
-        day.log.beers > 0 ||
-        day.log.alcoholUnits > 0),
+    (day.log.waterMl > 0 ||
+      day.log.sleepHours !== null ||
+      day.log.cigarettes > 0 ||
+      day.log.beers > 0 ||
+      day.log.alcoholUnits > 0),
   );
   const sore = day.sessions.some((s) => (s.discomfortSeverity ?? 0) >= 4);
 
   // An unfilled day that asked for something is the whole point of the screen,
   // so it is drawn as a faint ghost of what it should have been.
-  const expected = !isFuture && !runDone && !strengthDone && day.scheduled !== 'rest';
+  // `scheduled` is null before the plan started, and those days asked for
+  // nothing, so they are not gaps to fill.
+  const expected =
+    !isFuture && !runDone && !strengthDone && day.scheduled !== 'rest' && day.scheduled !== null;
 
   return (
     <button
@@ -215,7 +233,9 @@ function DayCell({
         {runDone && <span className={`h-2 w-2 rounded-full ${sore ? 'bg-alert' : 'bg-run'}`} />}
         {strengthDone && <span className="h-2 w-2 rounded-full bg-walk" />}
         {expected && (
-          <span className={`h-2 w-2 rounded-full ${day.scheduled === 'run' ? 'bg-run/20' : 'bg-walk/20'}`} />
+          <span
+            className={`h-2 w-2 rounded-full ${day.scheduled === 'run' ? 'bg-run/20' : 'bg-walk/20'}`}
+          />
         )}
         {hasLog && <span className="h-1.5 w-1.5 rounded-full bg-ink/25" />}
         {day.doses.due > 0 && day.doses.taken >= day.doses.due && (
@@ -261,7 +281,13 @@ function DayEditor({ day, isFuture }: { day: CalendarDay; isFuture: boolean }) {
       <Card>
         <Eyebrow>{full}</Eyebrow>
         <p className="mt-1 text-[0.875rem] text-ink-soft">
-          {day.scheduled === 'rest' ? 'Rest day' : day.scheduled === 'run' ? 'Running day' : 'Strength day'}
+          {day.scheduled === null
+            ? 'Before your plan started'
+            : day.scheduled === 'rest'
+              ? 'Rest day'
+              : day.scheduled === 'run'
+                ? 'Running day'
+                : 'Strength day'}
           {day.proteinG > 0 && ` · ${day.proteinG} g protein logged`}
         </p>
       </Card>
@@ -375,16 +401,18 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
       id: crypto.randomUUID(),
       date: day.date,
       type,
-      planId: type === 'run' ? plan?.id ?? null : null,
-      planWeek: type === 'run' ? planWeek?.index ?? null : null,
+      planId: type === 'run' ? (plan?.id ?? null) : null,
+      planWeek: type === 'run' ? (planWeek?.index ?? null) : null,
       prescription:
         type === 'run' && planWeek
           ? { runSec: planWeek.runSec, walkSec: planWeek.walkSec, reps: planWeek.reps }
           : null,
       completion,
       effort,
-      discomfort: location && severity > 0 ? { location, severity: severity as 1 | 2 | 3 | 4 | 5 } : null,
-      intervalsCompleted: type === 'run' && planWeek ? (completion === 'full' ? planWeek.reps : null) : null,
+      discomfort:
+        location && severity > 0 ? { location, severity: severity as 1 | 2 | 3 | 4 | 5 } : null,
+      intervalsCompleted:
+        type === 'run' && planWeek ? (completion === 'full' ? planWeek.reps : null) : null,
       durationSec: minutes ? Math.round(Number(minutes) * 60) : null,
       notes: 'Added later from the calendar',
     });
@@ -411,9 +439,11 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
         </ul>
       ) : (
         <p className="mt-1.5 text-[0.9375rem] text-ink-soft">
-          {day.scheduled === 'rest'
-            ? 'Nothing was scheduled. You can still add one.'
-            : 'Nothing logged, and this day asked for something.'}
+          {day.scheduled === null
+            ? 'This is before your plan began. You can still record something you did.'
+            : day.scheduled === 'rest'
+              ? 'Nothing was scheduled. You can still add one.'
+              : 'Nothing logged, and this day asked for something.'}
         </p>
       )}
 
@@ -474,8 +504,9 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
               ))}
             </div>
             <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-faint">
-              <strong className="text-ink-soft">{effortLabel(effort)}</strong> — {effortHint(effort)}. Recorded
-              for your own reading of the block; it does not change the plan.
+              <strong className="text-ink-soft">{effortLabel(effort)}</strong> —{' '}
+              {effortHint(effort)}. Recorded for your own reading of the block; it does not change
+              the plan.
             </p>
           </div>
 
@@ -491,7 +522,8 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
           <div>
             <span className="eyebrow">Any discomfort</span>
             <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-soft">
-              Unlike effort, this does move the plan: 3 twice in a week repeats it, 4 or above pauses it.
+              Unlike effort, this does move the plan: 3 twice in a week repeats it, 4 or above
+              pauses it.
             </p>
             <div className="mt-1.5">
               <Choices
@@ -527,8 +559,8 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
 
           {location && severity >= 4 && (
             <Note tone="alert">
-              Logging a 4 or above will pause progression, exactly as it would have at the time. That is the
-              point of recording it honestly.
+              Logging a 4 or above will pause progression, exactly as it would have at the time.
+              That is the point of recording it honestly.
             </Note>
           )}
 
@@ -570,7 +602,9 @@ function LoggedSession({
     [
       session.durationSec ? `${Math.round(session.durationSec / 60)} min` : null,
       session.effort ? `effort ${session.effort}/5` : null,
-      session.discomfortSeverity ? `${session.discomfortLocation} ${session.discomfortSeverity}/5` : null,
+      session.discomfortSeverity
+        ? `${session.discomfortLocation} ${session.discomfortSeverity}/5`
+        : null,
     ]
       .filter(Boolean)
       .join(' · ') || 'No detail recorded';
@@ -582,7 +616,11 @@ function LoggedSession({
           <p className="text-[0.9375rem]">
             {name}
             <span className="ml-2 text-[0.8125rem] text-ink-faint">
-              {session.completion === 'full' ? 'finished' : session.completion === 'partial' ? 'cut short' : 'skipped'}
+              {session.completion === 'full'
+                ? 'finished'
+                : session.completion === 'partial'
+                  ? 'cut short'
+                  : 'skipped'}
             </span>
           </p>
           <p className="text-[0.8125rem] text-ink-faint">{detail}</p>
@@ -599,10 +637,14 @@ function LoggedSession({
       </div>
 
       {confirming && (
-        <div className="mt-2.5 rounded-xl border border-alert bg-alert-wash p-3.5" role="alertdialog" aria-label="Confirm removal">
+        <div
+          className="mt-2.5 rounded-xl border border-alert bg-alert-wash p-3.5"
+          role="alertdialog"
+          aria-label="Confirm removal"
+        >
           <p className="text-[0.9375rem] leading-snug">
-            Remove this {name.toLowerCase()} session? It cannot be undone, and it will change what your week&apos;s
-            review decides.
+            Remove this {name.toLowerCase()} session? It cannot be undone, and it will change what
+            your week&apos;s review decides.
           </p>
           <div className="mt-3 flex gap-2.5">
             {/* The safe way out is the wider, first-reached control. */}
@@ -635,14 +677,19 @@ function DoseBackfill({ date }: { date: string }) {
       <Eyebrow>Doses that day</Eyebrow>
       <ul className="mt-1 divide-y divide-line">
         {data.doses.map((dose) => (
-          <li key={`${dose.item.id}-${dose.dueTime}`} className="flex items-center justify-between gap-3 py-2.5">
+          <li
+            key={`${dose.item.id}-${dose.dueTime}`}
+            className="flex items-center justify-between gap-3 py-2.5"
+          >
             <div className="min-w-0">
               <p className="truncate text-[0.9375rem]">{dose.item.name}</p>
               <p className="text-[0.8125rem] text-ink-faint">{dose.dueTime}</p>
             </div>
             <div className="flex shrink-0 gap-2">
               <button
-                onClick={() => log.mutate({ itemId: dose.item.id, dueTime: dose.dueTime, status: 'skipped' })}
+                onClick={() =>
+                  log.mutate({ itemId: dose.item.id, dueTime: dose.dueTime, status: 'skipped' })
+                }
                 className={`tap rounded-xl border px-3 text-[0.875rem] transition-colors ${
                   dose.status === 'skipped'
                     ? 'border-walk bg-walk-wash text-walk-deep'
@@ -652,9 +699,13 @@ function DoseBackfill({ date }: { date: string }) {
                 Skipped
               </button>
               <button
-                onClick={() => log.mutate({ itemId: dose.item.id, dueTime: dose.dueTime, status: 'taken' })}
+                onClick={() =>
+                  log.mutate({ itemId: dose.item.id, dueTime: dose.dueTime, status: 'taken' })
+                }
                 className={`tap rounded-xl px-4 text-[0.875rem] transition-colors ${
-                  dose.status === 'taken' ? 'bg-good text-white' : 'bg-ink text-chalk hover:bg-ink/90'
+                  dose.status === 'taken'
+                    ? 'bg-good text-white'
+                    : 'bg-ink text-chalk hover:bg-ink/90'
                 }`}
               >
                 Took it
@@ -687,13 +738,28 @@ function MeasurementBackfill({ day }: { day: CalendarDay }) {
       <Eyebrow>Measurements</Eyebrow>
       <div className="mt-2 grid grid-cols-3 gap-2.5">
         <Field label="Weight kg">
-          <TextInput type="number" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} />
+          <TextInput
+            type="number"
+            inputMode="decimal"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+          />
         </Field>
         <Field label="Waist cm">
-          <TextInput type="number" inputMode="decimal" value={waist} onChange={(e) => setWaist(e.target.value)} />
+          <TextInput
+            type="number"
+            inputMode="decimal"
+            value={waist}
+            onChange={(e) => setWaist(e.target.value)}
+          />
         </Field>
         <Field label="Rest HR">
-          <TextInput type="number" inputMode="numeric" value={hr} onChange={(e) => setHr(e.target.value)} />
+          <TextInput
+            type="number"
+            inputMode="numeric"
+            value={hr}
+            onChange={(e) => setHr(e.target.value)}
+          />
         </Field>
       </div>
       <Button

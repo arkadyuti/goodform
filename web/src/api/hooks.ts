@@ -672,7 +672,8 @@ export function useLogDose(date: string) {
 
 export interface CalendarDay {
   date: string;
-  scheduled: 'run' | 'strength' | 'rest';
+  /** null on days before the plan existed — nothing was asked of anyone yet. */
+  scheduled: 'run' | 'strength' | 'rest' | null;
   sessions: {
     id: string;
     type: 'run' | 'strength' | 'baseline';

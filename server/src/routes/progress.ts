@@ -346,6 +346,18 @@ export const progressRoutes = new Hono<AppEnv>()
     const to = c.req.query('to') ?? todayFrom(c);
     const from = c.req.query('from') ?? addDays(to, -30);
 
+    // Nothing was asked of anyone before their plan existed. Without this the
+    // calendar projects the weekly rhythm backwards for ever, so an account
+    // created today opens on a month of days marked "session not logged" —
+    // telling a brand new runner they have already missed fifteen sessions.
+    const [firstPlan] = await db
+      .select({ startDate: schema.plans.startDate })
+      .from(schema.plans)
+      .where(eq(schema.plans.userId, userId))
+      .orderBy(asc(schema.plans.startDate))
+      .limit(1);
+    const planStart = firstPlan?.startDate ?? null;
+
     const [sessions, logs, checks, protein, doseEvents, items] = await Promise.all([
       db
         .select()
@@ -384,7 +396,7 @@ export const progressRoutes = new Hono<AppEnv>()
       const onDay = doseEvents.filter((e) => e.dueDate === date);
       return {
         date,
-        scheduled: scheduleFor(date),
+        scheduled: planStart && date >= planStart ? scheduleFor(date) : null,
         sessions: (sessionsByDate.get(date) ?? []).map((session) => ({
           id: session.id,
           type: session.type,
