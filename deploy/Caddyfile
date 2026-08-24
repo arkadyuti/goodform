@@ -1,0 +1,18 @@
+goodform.visharka.us {
+	encode zstd gzip
+
+	header {
+		# HTTPS only, once seen. Caddy already redirects; this stops the first
+		# plaintext request on later visits.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Nothing here is meant to be framed, and clickjacking a habit tracker
+		# still means someone else driving the taps.
+		X-Frame-Options "DENY"
+		Permissions-Policy "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+		-Server
+	}
+
+	reverse_proxy localhost:8790
+}

@@ -1,0 +1,38 @@
+# Installed at /etc/systemd/system/goodform.service on the VPS.
+# Kept here so the running configuration is reviewable, not only on the box.
+[Unit]
+Description=GoodForm
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=goodform
+Group=goodform
+WorkingDirectory=/opt/goodform/current
+EnvironmentFile=/opt/goodform/.env
+Environment=WEB_DIST=/opt/goodform/current/web/dist
+Environment=NODE_OPTIONS=--max-old-space-size=192
+ExecStart=/usr/local/bin/node /opt/goodform/current/index.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=goodform
+
+# This box has 457MB of RAM and also runs Postgres and Caddy. Cap the app so a
+# leak degrades one service instead of OOM-killing the machine.
+MemoryHigh=220M
+MemoryMax=320M
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/goodform
+
+[Install]
+WantedBy=multi-user.target
