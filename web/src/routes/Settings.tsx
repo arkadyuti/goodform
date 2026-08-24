@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useProfile, useSaveSettings } from '../api/hooks.ts';
-import { signOut } from '../lib/auth.ts';
+import { signOut, useSession } from '../lib/auth.ts';
+import { clearDraft } from '../lib/onboardingDraft.ts';
 import { audioSessionSupported, hapticsSupported } from '../timer/cues.ts';
 import { ScreenWakeLock } from '../timer/wakeLock.ts';
 import { Button, Card, Choices, Eyebrow, Field, Note, TextInput } from '../components/ui.tsx';
@@ -16,6 +17,7 @@ const HABITS = [
 export function SettingsView() {
   const navigate = useNavigate();
   const { data } = useProfile();
+  const { data: session } = useSession();
   const save = useSaveSettings();
   const settings = data?.settings;
   const profile = data?.profile;
@@ -211,7 +213,15 @@ export function SettingsView() {
         guidance — it is not medical advice and does not replace a doctor or physiotherapist.
       </Note>
 
-      <Button variant="quiet" full className="py-3" onClick={() => signOut()}>
+      <Button
+        variant="quiet"
+        full
+        className="py-3"
+        onClick={() => {
+          if (session?.user?.id) clearDraft(session.user.id);
+          void signOut();
+        }}
+      >
         Sign out
       </Button>
     </div>

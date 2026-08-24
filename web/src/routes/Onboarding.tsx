@@ -10,6 +10,7 @@ import {
   useSaveScreening,
 } from '../api/hooks.ts';
 import { clearDraft, loadDraft, saveDraft } from '../lib/onboardingDraft.ts';
+import { useSession } from '../lib/auth.ts';
 import { Button, Choices, Eyebrow, Field, Note, TextInput } from '../components/ui.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
 import { BaselineRun, StopReasonChoice } from '../components/BaselineRun.tsx';
@@ -67,7 +68,9 @@ export function Onboarding() {
   const generatePlan = useGeneratePlan();
 
   const { data: profileData } = useProfile();
-  const restored = useRef(loadDraft());
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? '';
+  const restored = useRef(loadDraft(userId));
   const lastSaved = useRef<string | null>(null);
   /** Whether a profile already existed when this screen opened. */
   const [editingExisting, setEditingExisting] = useState<boolean | null>(null);
@@ -107,8 +110,9 @@ export function Onboarding() {
 
   useEffect(() => {
     if (step === 'reveal') return;
-    saveDraft({ step, furthest, profile: draft, flags, acknowledged, minutesRun, stopReason, baselineMode });
-  }, [step, furthest, draft, flags, acknowledged, minutesRun, stopReason, baselineMode]);
+    if (!userId) return;
+    saveDraft(userId, { step, furthest, profile: draft, flags, acknowledged, minutesRun, stopReason, baselineMode });
+  }, [userId, step, furthest, draft, flags, acknowledged, minutesRun, stopReason, baselineMode]);
 
   const set = <K extends keyof Profile>(key: K, value: Profile[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
@@ -143,7 +147,7 @@ export function Onboarding() {
    */
   const saveAndClose = async () => {
     await persistIfChanged();
-    clearDraft();
+    clearDraft(userId);
     navigate('/');
   };
 
@@ -168,7 +172,7 @@ export function Onboarding() {
         weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[];
       };
       setPlan({ weeks: result.weeks, reasons: result.plan.conservatismReasons });
-      clearDraft();
+      clearDraft(userId);
       go('reveal');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not build your plan.');
@@ -651,7 +655,7 @@ export function Onboarding() {
             full
             className="mt-6 py-3.5"
             onClick={() => {
-              clearDraft();
+              clearDraft(userId);
               navigate('/');
             }}
           >

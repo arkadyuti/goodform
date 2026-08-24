@@ -1,6 +1,11 @@
 import type { Profile, ScreeningFlag, StopReason } from '@goodform/shared';
 
-const KEY = 'goodform:onboarding';
+/**
+ * Scoped per user: on a shared device an unscoped draft would hand one
+ * person's half-finished health answers to whoever signs in next.
+ */
+const key = (userId: string) => `goodform:onboarding:${userId}`;
+const LEGACY_KEY = 'goodform:onboarding';
 
 export interface OnboardingDraft {
   step: string;
@@ -17,9 +22,10 @@ export interface OnboardingDraft {
  * Onboarding asks a lot of questions before it saves anything, so a reload or
  * a closed tab halfway through would otherwise throw all of it away.
  */
-export function loadDraft(): Partial<OnboardingDraft> | null {
+export function loadDraft(userId: string): Partial<OnboardingDraft> | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    localStorage.removeItem(LEGACY_KEY);
+    const raw = localStorage.getItem(key(userId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<OnboardingDraft>;
     // The reveal needs a freshly generated plan in memory, so resume before it.
@@ -30,17 +36,17 @@ export function loadDraft(): Partial<OnboardingDraft> | null {
   }
 }
 
-export function saveDraft(draft: OnboardingDraft): void {
+export function saveDraft(userId: string, draft: OnboardingDraft): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(draft));
+    localStorage.setItem(key(userId), JSON.stringify(draft));
   } catch {
     // Private browsing or a full quota: the wizard still works, just without resume.
   }
 }
 
-export function clearDraft(): void {
+export function clearDraft(userId: string): void {
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(key(userId));
   } catch {
     // Nothing to do.
   }
