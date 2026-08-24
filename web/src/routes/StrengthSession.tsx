@@ -34,6 +34,7 @@ export function StrengthSession() {
   const session = sessions[slot] ?? sessions[0];
   const [setsDone, setSetsDone] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!profile || !session) {
     return (
@@ -48,16 +49,24 @@ export function StrengthSession() {
 
   const save = async () => {
     setSaving(true);
-    await logSession.mutateAsync({
-      id: crypto.randomUUID(),
-      date: today(),
-      type: 'strength',
-      completion: doneSets >= totalSets ? 'full' : doneSets > 0 ? 'partial' : 'skipped',
-      exerciseLog: setsDone,
-      effort: null,
-      discomfort: null,
-    });
-    navigate('/');
+    setError(null);
+    try {
+      await logSession.mutateAsync({
+        id: crypto.randomUUID(),
+        date: today(),
+        type: 'strength',
+        completion: doneSets >= totalSets ? 'full' : doneSets > 0 ? 'partial' : 'skipped',
+        exerciseLog: setsDone,
+        effort: null,
+        discomfort: null,
+      });
+      navigate('/');
+    } catch {
+      // Without this the button stayed on "Saving" for ever and the work was
+      // gone, with the failure visible only in a console nobody has open.
+      setError('That did not save. Your sets are still here — try again.');
+      setSaving(false);
+    }
   };
 
   return (
@@ -182,6 +191,11 @@ export function StrengthSession() {
       <Button full className="mt-5 py-4 text-[1.0625rem]" disabled={saving} onClick={save}>
         {saving ? 'Saving' : doneSets >= totalSets ? 'Save — all done' : 'Save what I did'}
       </Button>
+      {error && (
+        <p className="mt-2.5 text-center text-[0.9375rem] text-alert" role="alert">
+          {error}
+        </p>
+      )}
       <StopRules className="mt-4" />
     </div>
   );

@@ -377,6 +377,7 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
   const remove = useDeleteSession();
   const { data: planData } = usePlan();
   const [adding, setAdding] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [type, setType] = useState<SessionType>(day.scheduled === 'strength' ? 'strength' : 'run');
   const [completion, setCompletion] = useState<'full' | 'partial'>('full');
@@ -397,6 +398,15 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
   }, [plan, weeks, day.date]);
 
   const save = async () => {
+    setSaveError(null);
+    try {
+      await doSave();
+    } catch {
+      setSaveError('That did not save. Nothing was lost — try again.');
+    }
+  };
+
+  const doSave = async () => {
     await backfill.mutateAsync({
       id: crypto.randomUUID(),
       date: day.date,
@@ -578,6 +588,7 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
               Cancel
             </Button>
           </div>
+          {saveError && <Note tone="alert">{saveError}</Note>}
         </div>
       )}
     </Card>

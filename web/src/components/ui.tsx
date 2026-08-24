@@ -16,10 +16,14 @@ export function Button({
   variant = 'primary',
   className = '',
   full,
+  // Explicit, because a <button> inside a <form> defaults to submit, and
+  // several of these sit inside one. Any caller that wants to submit says so.
+  type = 'button',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; full?: boolean }) {
   return (
     <button
+      type={type}
       {...props}
       className={`tap inline-flex items-center justify-center gap-2 rounded-xl px-5 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${VARIANTS[variant]} ${full ? 'w-full' : ''} ${className}`}
     />
