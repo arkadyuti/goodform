@@ -41,5 +41,37 @@ export const env = {
   schedulerEnabled: process.env.REMINDER_SCHEDULER !== 'false',
 };
 
+/**
+ * Refuse to start in a configuration that is unsafe to expose.
+ *
+ * Each of these is a single environment variable away from a serious problem,
+ * and each fails silently otherwise — the app comes up looking fine. Failing at
+ * boot instead means the deploy health check catches it and rolls back, so the
+ * bad configuration never serves a request.
+ */
+if (env.isProd) {
+  const problems: string[] = [];
+
+  // Email/password sign-up in production lets whoever knows an allowlisted
+  // address register it first, set a password, and then have the real owner's
+  // Google sign-in link straight into that account.
+  if (env.devLogin) problems.push('DEV_LOGIN must be false in production');
+
+  if (env.authSecret === 'dev-secret-change-me-dev-secret-change')
+    problems.push('BETTER_AUTH_SECRET is still the published development default');
+  if (env.authSecret.length < 32) problems.push('BETTER_AUTH_SECRET must be at least 32 characters');
+
+  if (!env.appUrl.startsWith('https://')) problems.push('APP_URL must be https in production');
+
+  // A credentialed CORS origin of localhost means anything running on a user's
+  // own machine can call the API as them.
+  const local = env.devOrigins.filter((origin) => !origin.startsWith('https://'));
+  if (local.length) problems.push(`DEV_ORIGINS must be https in production (got ${local.join(', ')})`);
+
+  if (problems.length) {
+    throw new Error(`Refusing to start with an unsafe production configuration:\n  - ${problems.join('\n  - ')}`);
+  }
+}
+
 export const googleEnabled = Boolean(env.googleClientId && env.googleClientSecret);
 export const pushEnabled = Boolean(env.vapidPublicKey && env.vapidPrivateKey);

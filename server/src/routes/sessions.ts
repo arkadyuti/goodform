@@ -3,7 +3,7 @@ import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DISCOMFORT_LOCATIONS } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
-import { requireAuth, type AppEnv } from '../middleware.js';
+import { dateRangeFrom, requireAuth, type AppEnv } from '../middleware.js';
 
 const sessionSchema = z.object({
   /** Client-generated UUID makes an offline replay idempotent. */
@@ -29,11 +29,12 @@ export const sessionRoutes = new Hono<AppEnv>()
 
   .get('/', async (c) => {
     const userId = c.get('userId');
-    const from = c.req.query('from');
-    const to = c.req.query('to');
-    const conditions = [eq(schema.workoutSessions.userId, userId)];
-    if (from) conditions.push(gte(schema.workoutSessions.date, from));
-    if (to) conditions.push(lte(schema.workoutSessions.date, to));
+    const { from, to } = await dateRangeFrom(c, { defaultDays: 365, maxDays: 1830 });
+    const conditions = [
+      eq(schema.workoutSessions.userId, userId),
+      gte(schema.workoutSessions.date, from),
+      lte(schema.workoutSessions.date, to),
+    ];
 
     const rows = await db
       .select()
@@ -68,10 +69,21 @@ export const sessionRoutes = new Hono<AppEnv>()
       notes: s.notes ?? null,
     };
 
-    await db
+    // The id is client-supplied, so the offline queue can retry a write without
+    // logging the session twice. That makes the conflict clause an
+    // authorisation boundary: on the primary key alone, a request naming
+    // someone else's session id would overwrite *their* record — and because
+    // `values` carries userId, it would hand the row over as well.
+    const [written] = await db
       .insert(schema.workoutSessions)
       .values(values)
-      .onConflictDoUpdate({ target: schema.workoutSessions.id, set: values });
+      .onConflictDoUpdate({
+        target: schema.workoutSessions.id,
+        set: values,
+        setWhere: eq(schema.workoutSessions.userId, userId),
+      })
+      .returning({ id: schema.workoutSessions.id });
+    if (!written) return c.json({ error: 'Not found' }, 404);
 
     // FR-5.7: completed strength work advances the prescription next time.
     if (s.type === 'strength' && s.completion === 'full' && s.exerciseLog) {

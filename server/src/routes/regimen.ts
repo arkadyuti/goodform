@@ -17,7 +17,7 @@ import {
   type RegimenItem,
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
-import { requireAuth, todayFrom, type AppEnv } from '../middleware.js';
+import { dateRangeFrom, requireAuth, todayFrom, type AppEnv } from '../middleware.js';
 import { adjustSupply, loadActiveItems, loadAllItems, loadEvents, resolveReminder, toEvent, toItem } from '../regimen-store.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -226,13 +226,18 @@ export const regimenRoutes = new Hono<AppEnv>()
       recordedAt: new Date(),
     };
 
-    await db
+    // Client-supplied id again, and the same boundary: without setWhere a tick
+    // naming another account's event id would rewrite their dose history.
+    const [written] = await db
       .insert(schema.regimenEvents)
       .values(row)
       .onConflictDoUpdate({
         target: schema.regimenEvents.id,
         set: { status: row.status, recordedAt: row.recordedAt },
-      });
+        setWhere: eq(schema.regimenEvents.userId, userId),
+      })
+      .returning({ id: schema.regimenEvents.id });
+    if (!written) return c.json({ error: 'Not found' }, 404);
 
     // Supply follows the ticks, so the count on screen is the count in the box.
     const wasTaken = previous?.status === 'taken';
@@ -279,8 +284,7 @@ export const regimenRoutes = new Hono<AppEnv>()
   /** Per-item history and adherence over a window. */
   .get('/history', async (c) => {
     const userId = c.get('userId');
-    const to = await todayFrom(c);
-    const from = c.req.query('from') ?? addDays(to, -27);
+    const { from, to } = await dateRangeFrom(c, { defaultDays: 27, maxDays: 366 });
 
     const items = await loadAllItems(userId);
     const events = await loadEvents(userId, from, to);
@@ -301,8 +305,7 @@ export const regimenRoutes = new Hono<AppEnv>()
 
   .get('/events', async (c) => {
     const userId = c.get('userId');
-    const to = await todayFrom(c);
-    const from = c.req.query('from') ?? '1970-01-01';
+    const { from, to } = await dateRangeFrom(c, { defaultDays: 365, maxDays: 1830 });
     const rows = await db
       .select()
       .from(schema.regimenEvents)

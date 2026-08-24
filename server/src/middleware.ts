@@ -1,4 +1,6 @@
 import type { Context, Next } from 'hono';
+import { HTTPException } from 'hono/http-exception';
+import { addDays, daysBetween } from '@goodform/shared';
 import { eq } from 'drizzle-orm';
 import { auth } from './auth.js';
 import { db, schema } from './db/index.js';
@@ -44,4 +46,35 @@ export async function todayFrom(c: Context<AppEnv>): Promise<string> {
     if (row?.timezone) return localParts(new Date(), row.timezone).date;
   }
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Matches a date the rest of the app can actually work with. */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A bounded `from`/`to` pair off the query string.
+ *
+ * Every range endpoint walks one iteration per calendar day, so an unbounded
+ * span is a way to make the process allocate millions of objects — on a box
+ * capped at a 192MB heap, that is a crash, and `Restart=always` makes it a
+ * loop. A malformed date is worse than useless: it becomes `Invalid Date` and
+ * throws somewhere further in. Reject both here, once, rather than in seven
+ * handlers that each have to remember.
+ */
+export async function dateRangeFrom(
+  c: Context<AppEnv>,
+  options: { maxDays?: number; defaultDays?: number } = {},
+): Promise<{ from: string; to: string }> {
+  const { maxDays = 366, defaultDays = 30 } = options;
+  const to = c.req.query('to') ?? (await todayFrom(c));
+  const from = c.req.query('from') ?? addDays(to, -defaultDays);
+
+  if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) {
+    throw new HTTPException(400, { message: 'Dates must be YYYY-MM-DD' });
+  }
+  const span = daysBetween(from, to);
+  if (span < 0) throw new HTTPException(400, { message: 'The range ends before it starts' });
+  if (span > maxDays) throw new HTTPException(400, { message: `Ranges are limited to ${maxDays} days` });
+
+  return { from, to };
 }

@@ -20,7 +20,9 @@ export const auth = betterAuth({
   // Local development sign-in, so the app is usable before Google OAuth
   // credentials exist. Disabled by leaving DEV_LOGIN unset in production.
   emailAndPassword: {
-    enabled: env.devLogin,
+    // Belt and braces with the boot check in env.ts: even if that were removed,
+    // this can never be on in production.
+    enabled: env.devLogin && !env.isProd,
     requireEmailVerification: false,
   },
   socialProviders: googleEnabled

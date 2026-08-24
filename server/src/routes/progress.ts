@@ -14,7 +14,7 @@ import {
   type WorkoutSession,
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
-import { requireAuth, todayFrom, type AppEnv } from '../middleware.js';
+import { dateRangeFrom, requireAuth, todayFrom, type AppEnv } from '../middleware.js';
 import { loadAllItems, loadEvents } from '../regimen-store.js';
 
 function daysAgo(n: number): string {
@@ -143,8 +143,7 @@ export const progressRoutes = new Hono<AppEnv>()
    */
   .get('/trends', async (c) => {
     const userId = c.get('userId');
-    const to = await todayFrom(c);
-    const from = c.req.query('from') ?? addDays(to, -180);
+    const { from, to } = await dateRangeFrom(c, { defaultDays: 180, maxDays: 1830 });
 
     const [sessions, checks] = await Promise.all([
       db
@@ -343,8 +342,7 @@ export const progressRoutes = new Hono<AppEnv>()
    */
   .get('/calendar', async (c) => {
     const userId = c.get('userId');
-    const to = c.req.query('to') ?? await todayFrom(c);
-    const from = c.req.query('from') ?? addDays(to, -30);
+    const { from, to } = await dateRangeFrom(c, { defaultDays: 30, maxDays: 92 });
 
     // Nothing was asked of anyone before their plan existed. Without this the
     // calendar projects the weekly rhythm backwards for ever, so an account

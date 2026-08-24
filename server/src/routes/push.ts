@@ -7,8 +7,40 @@ import { pushToUser } from '../push.js';
 import { requireAuth, type AppEnv } from '../middleware.js';
 import { resolveReminder } from '../regimen-store.js';
 
+/**
+ * The push services a browser can legitimately hand us an endpoint for.
+ *
+ * The endpoint is a URL this server will later make a POST request to, so
+ * accepting an arbitrary one turns `/api/push/subscribe` plus a test send into
+ * a request-forgery primitive: give it `http://169.254.169.254/…` and the
+ * server fetches cloud metadata on the caller's behalf. A browser only ever
+ * produces one of these hosts.
+ */
+const PUSH_HOSTS = [
+  'android.googleapis.com',
+  'fcm.googleapis.com',
+  '.push.services.mozilla.com',
+  '.notify.windows.com',
+  '.push.apple.com',
+  '.pushservice.mozilla.com',
+];
+
+function isPushEndpoint(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  return PUSH_HOSTS.some((allowed) =>
+    allowed.startsWith('.') ? host.endsWith(allowed) : host === allowed,
+  );
+}
+
 const subscriptionSchema = z.object({
-  endpoint: z.string().url().max(2000),
+  endpoint: z.string().url().max(2000).refine(isPushEndpoint, 'Not a recognised push service endpoint'),
   keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(200) }),
 });
 

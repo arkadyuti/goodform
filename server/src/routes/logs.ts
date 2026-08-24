@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
-import { requireAuth, type AppEnv } from '../middleware.js';
+import { dateRangeFrom, requireAuth, type AppEnv } from '../middleware.js';
 
 const dailyLogSchema = z.object({
   waterMl: z.number().int().min(0).max(10_000).optional(),
@@ -31,11 +31,12 @@ export const logRoutes = new Hono<AppEnv>()
 
   /** Range fetch powers the quit-support cards and habit trends. */
   .get('/daily', async (c) => {
-    const from = c.req.query('from');
-    const to = c.req.query('to');
-    const conditions = [eq(schema.dailyLogs.userId, c.get('userId'))];
-    if (from) conditions.push(gte(schema.dailyLogs.date, from));
-    if (to) conditions.push(lte(schema.dailyLogs.date, to));
+    const { from, to } = await dateRangeFrom(c, { defaultDays: 90, maxDays: 1830 });
+    const conditions = [
+      eq(schema.dailyLogs.userId, c.get('userId')),
+      gte(schema.dailyLogs.date, from),
+      lte(schema.dailyLogs.date, to),
+    ];
     const logs = await db
       .select()
       .from(schema.dailyLogs)
