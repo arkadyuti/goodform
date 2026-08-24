@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, type AppEnv } from '../middleware.js';
-import { csv, type Cell } from '../csv.js';
+import { csv } from '../csv.js';
 
 const DATASETS = [
   'sessions',
