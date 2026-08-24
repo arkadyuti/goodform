@@ -105,7 +105,10 @@ export interface SessionRow {
  * older than the change just made — so refetching would undo it on screen.
  * The sync watcher invalidates everything once the queue drains.
  */
-function invalidateIfOnline(qc: ReturnType<typeof useQueryClient>, queryKeys: readonly (readonly unknown[])[]): void {
+function invalidateIfOnline(
+  qc: ReturnType<typeof useQueryClient>,
+  queryKeys: readonly (readonly unknown[])[],
+): void {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   for (const key of queryKeys) void qc.invalidateQueries({ queryKey: key });
 }
@@ -115,6 +118,7 @@ export const keys = {
   profile: ['profile'] as const,
   plan: ['plan'] as const,
   weekReview: ['week-review'] as const,
+  breakCheck: ['break-check'] as const,
   sessions: (from?: string) => ['sessions', from ?? 'all'] as const,
   dailyLog: (date: string) => ['daily-log', date] as const,
   dailyRange: (from: string) => ['daily-range', from] as const,
@@ -203,7 +207,14 @@ export function useNutrition(date: string) {
     queryKey: keys.nutrition(date),
     queryFn: () =>
       api.get<{
-        entries: { id: string; foodItemId: string; name: string; servingLabel: string; proteinG: number; servings: number }[];
+        entries: {
+          id: string;
+          foodItemId: string;
+          name: string;
+          servingLabel: string;
+          proteinG: number;
+          servings: number;
+        }[];
         proteinTotal: number;
       }>(`/nutrition/entries/${date}`),
   });
@@ -228,7 +239,12 @@ export function useProgress() {
         adherence: { runsCompleted: number; runsPlanned: number; strengthCompleted: number };
         longestRunSec: number;
         discomfort: { date: string; location: string; severity: number }[];
-        checks: { date: string; weightKg: number | null; waistCm: number | null; restingHr: number | null }[];
+        checks: {
+          date: string;
+          weightKg: number | null;
+          waistCm: number | null;
+          restingHr: number | null;
+        }[];
         recentSessions: SessionRow[];
       }>('/progress/summary'),
   });
@@ -270,7 +286,8 @@ export function useSaveScreening() {
 
 export function useSaveBaseline() {
   return useMutation({
-    mutationFn: (input: { minutesRun: number; stopReason: StopReason }) => api.post('/plan/baseline', input),
+    mutationFn: (input: { minutesRun: number; stopReason: StopReason }) =>
+      api.post('/plan/baseline', input),
   });
 }
 
@@ -304,7 +321,8 @@ export interface SessionInput {
 export function useLogSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: SessionInput) => api.durable('/sessions', 'POST', input, `session:${input.id}`),
+    mutationFn: (input: SessionInput) =>
+      api.durable('/sessions', 'POST', input, `session:${input.id}`),
     onSettled: () =>
       invalidateIfOnline(qc, [['sessions'], keys.weekReview, keys.progress, keys.strengthProgress]),
   });
@@ -313,8 +331,10 @@ export function useLogSession() {
 export function useWeekDecision() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { action: 'advance' | 'repeat' | 'step_back' | 'pause' | 'resume'; override?: boolean }) =>
-      api.post('/plan/week-decision', input),
+    mutationFn: (input: {
+      action: 'advance' | 'repeat' | 'step_back' | 'pause' | 'resume';
+      override?: boolean;
+    }) => api.post('/plan/week-decision', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.plan });
       void qc.invalidateQueries({ queryKey: keys.weekReview });
@@ -376,7 +396,9 @@ export function useAddFoodEntry(date: string) {
     onMutate: async (input) => {
       if (!input.food) return;
       await qc.cancelQueries({ queryKey: keys.nutrition(date) });
-      const previous = qc.getQueryData<{ entries: unknown[]; proteinTotal: number }>(keys.nutrition(date));
+      const previous = qc.getQueryData<{ entries: unknown[]; proteinTotal: number }>(
+        keys.nutrition(date),
+      );
       qc.setQueryData(keys.nutrition(date), {
         entries: [
           {
@@ -389,7 +411,9 @@ export function useAddFoodEntry(date: string) {
           },
           ...(previous?.entries ?? []),
         ],
-        proteinTotal: Math.round((previous?.proteinTotal ?? 0) + input.food.proteinG * input.servings),
+        proteinTotal: Math.round(
+          (previous?.proteinTotal ?? 0) + input.food.proteinG * input.servings,
+        ),
       });
       return { previous };
     },
@@ -411,8 +435,11 @@ export function useRemoveFoodEntry(date: string) {
 export function useSaveWeeklyCheck(date: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { weightKg?: number | null; waistCm?: number | null; restingHr?: number | null }) =>
-      api.put(`/logs/weekly/${date}`, input),
+    mutationFn: (input: {
+      weightKg?: number | null;
+      waistCm?: number | null;
+      restingHr?: number | null;
+    }) => api.put(`/logs/weekly/${date}`, input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.progress });
       void qc.invalidateQueries({ queryKey: keys.profile });
@@ -520,11 +547,40 @@ export function useBlockOutcome(enabled: boolean) {
   });
 }
 
+export interface BreakCheck {
+  onBreak: boolean;
+  gapDays?: number;
+  lastSession?: string;
+  result?: { stepBackWeeks: number; needsReassessment: boolean; reason: string };
+}
+
+/** FR-3.5: has there been a gap long enough to change the plan? */
+export function useBreakCheck(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.breakCheck,
+    queryFn: () => api.get<BreakCheck>(`/plan/break-check?date=${today()}`),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useReturnFromBreak() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post(`/plan/return-from-break?date=${today()}`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries();
+    },
+  });
+}
+
 export function useReassess() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { goal: Goal; baseline?: { minutesRun: number; stopReason: StopReason } | null }) =>
-      api.post('/plan/reassess', input),
+    mutationFn: (input: {
+      goal: Goal;
+      baseline?: { minutesRun: number; stopReason: StopReason } | null;
+    }) => api.post('/plan/reassess', input),
     onSuccess: () => {
       void qc.invalidateQueries();
     },
@@ -554,7 +610,8 @@ export type RegimenItemInput = Omit<RegimenItem, 'id' | 'archivedAt'>;
 export function useRegimenItems(includeArchived = false) {
   return useQuery({
     queryKey: [...keys.regimenItems, includeArchived],
-    queryFn: () => api.get<{ items: RegimenItem[] }>(`/regimen/items${includeArchived ? '?all=true' : ''}`),
+    queryFn: () =>
+      api.get<{ items: RegimenItem[] }>(`/regimen/items${includeArchived ? '?all=true' : ''}`),
   });
 }
 
@@ -585,7 +642,10 @@ export interface RegimenHistoryRow {
 export function useRegimenHistory(from: string) {
   return useQuery({
     queryKey: keys.regimenHistory(from),
-    queryFn: () => api.get<{ from: string; to: string; items: RegimenHistoryRow[] }>(`/regimen/history?from=${from}`),
+    queryFn: () =>
+      api.get<{ from: string; to: string; items: RegimenHistoryRow[] }>(
+        `/regimen/history?from=${from}`,
+      ),
   });
 }
 
@@ -694,9 +754,10 @@ export interface CalendarDay {
 export function useCalendar(from: string, to: string) {
   return useQuery({
     queryKey: ['calendar', from, to],
-    queryFn: () => api.get<{ from: string; to: string; days: CalendarDay[] }>(
-      `/progress/calendar?from=${from}&to=${to}`,
-    ),
+    queryFn: () =>
+      api.get<{ from: string; to: string; days: CalendarDay[] }>(
+        `/progress/calendar?from=${from}&to=${to}`,
+      ),
   });
 }
 
@@ -707,7 +768,8 @@ export function useCalendar(from: string, to: string) {
 export function useBackfillSession() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: SessionInput) => api.durable('/sessions', 'POST', input, `session:${input.id}`),
+    mutationFn: (input: SessionInput) =>
+      api.durable('/sessions', 'POST', input, `session:${input.id}`),
     onSettled: () =>
       invalidateIfOnline(qc, [
         ['sessions'],
@@ -726,6 +788,12 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: (id: string) => api.del(`/sessions/${id}`),
     onSettled: () =>
-      invalidateIfOnline(qc, [['sessions'], ['calendar'], keys.weekReview, keys.progress, keys.trends]),
+      invalidateIfOnline(qc, [
+        ['sessions'],
+        ['calendar'],
+        keys.weekReview,
+        keys.progress,
+        keys.trends,
+      ]),
   });
 }

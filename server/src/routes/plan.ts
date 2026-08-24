@@ -138,13 +138,22 @@ export const planRoutes = new Hono<AppEnv>()
       .safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: 'Invalid start date' }, 400);
 
-    const [profileRow] = await db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId));
+    const [profileRow] = await db
+      .select()
+      .from(schema.profiles)
+      .where(eq(schema.profiles.userId, userId));
     if (!profileRow) return c.json({ error: 'Complete your profile first' }, 400);
 
-    const [screening] = await db.select().from(schema.screenings).where(eq(schema.screenings.userId, userId));
+    const [screening] = await db
+      .select()
+      .from(schema.screenings)
+      .where(eq(schema.screenings.userId, userId));
     // SR-1: a flagged screening must be acknowledged before a plan is generated.
     if (screening && screening.flags.length > 0 && !screening.acknowledgedAt) {
-      return c.json({ error: 'Screening needs acknowledgement before a plan can be generated' }, 409);
+      return c.json(
+        { error: 'Screening needs acknowledgement before a plan can be generated' },
+        409,
+      );
     }
 
     const [baseline] = await db
@@ -210,9 +219,9 @@ export const planRoutes = new Hono<AppEnv>()
     const week = current.weeks.find((w) => w.index === current.plan.currentWeek);
     if (!week) return c.json({ error: 'Week not found' }, 404);
 
-    const repeatsBefore = current.weeks
-      .filter((w) => w.index < week.index)
-      .reduce((sum, w) => sum + w.repeats, 0) + week.repeats;
+    const repeatsBefore =
+      current.weeks.filter((w) => w.index < week.index).reduce((sum, w) => sum + w.repeats, 0) +
+      week.repeats;
     const { from, to } = weekRange(current.plan.startDate, week.index, repeatsBefore);
 
     const rows = await db
@@ -268,7 +277,9 @@ export const planRoutes = new Hono<AppEnv>()
         await db
           .update(schema.planWeeks)
           .set({ completedAt: new Date() })
-          .where(and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)));
+          .where(
+            and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
+          );
         const next = plan.currentWeek + 1;
         await db
           .update(schema.plans)
@@ -280,19 +291,30 @@ export const planRoutes = new Hono<AppEnv>()
         await db
           .update(schema.planWeeks)
           .set({ repeats: (weeks.find((w) => w.index === plan.currentWeek)?.repeats ?? 0) + 1 })
-          .where(and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)));
-        await db.update(schema.plans).set({ pausedReason: null }).where(eq(schema.plans.id, plan.id));
+          .where(
+            and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
+          );
+        await db
+          .update(schema.plans)
+          .set({ pausedReason: null })
+          .where(eq(schema.plans.id, plan.id));
         return c.json({ currentWeek: plan.currentWeek, repeated: true });
       }
       case 'step_back': {
         const back = Math.max(1, plan.currentWeek - 1);
-        await db.update(schema.plans).set({ currentWeek: back, pausedReason: null }).where(eq(schema.plans.id, plan.id));
+        await db
+          .update(schema.plans)
+          .set({ currentWeek: back, pausedReason: null })
+          .where(eq(schema.plans.id, plan.id));
         return c.json({ currentWeek: back });
       }
       case 'pause': {
         await db
           .update(schema.plans)
-          .set({ status: 'paused', pausedReason: 'Discomfort at 4 or above — resting until this settles.' })
+          .set({
+            status: 'paused',
+            pausedReason: 'Discomfort at 4 or above — resting until this settles.',
+          })
           .where(eq(schema.plans.id, plan.id));
         return c.json({ status: 'paused' });
       }
@@ -331,7 +353,12 @@ export const planRoutes = new Hono<AppEnv>()
     const sessions = await db
       .select()
       .from(schema.workoutSessions)
-      .where(and(eq(schema.workoutSessions.userId, userId), gte(schema.workoutSessions.date, plan.startDate)));
+      .where(
+        and(
+          eq(schema.workoutSessions.userId, userId),
+          gte(schema.workoutSessions.date, plan.startDate),
+        ),
+      );
 
     const outcome = summariseBlock(
       { goal: plan.goal as Goal, currentWeek: plan.currentWeek },
@@ -375,9 +402,13 @@ export const planRoutes = new Hono<AppEnv>()
           .nullish(),
       })
       .safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: 'Invalid reassessment', issues: parsed.error.issues }, 400);
+    if (!parsed.success)
+      return c.json({ error: 'Invalid reassessment', issues: parsed.error.issues }, 400);
 
-    const [profileRow] = await db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId));
+    const [profileRow] = await db
+      .select()
+      .from(schema.profiles)
+      .where(eq(schema.profiles.userId, userId));
     if (!profileRow) return c.json({ error: 'Complete your profile first' }, 400);
 
     const [previous] = await db
@@ -397,10 +428,18 @@ export const planRoutes = new Hono<AppEnv>()
       const sessions = await db
         .select()
         .from(schema.workoutSessions)
-        .where(and(eq(schema.workoutSessions.userId, userId), gte(schema.workoutSessions.date, previous.startDate)));
+        .where(
+          and(
+            eq(schema.workoutSessions.userId, userId),
+            gte(schema.workoutSessions.date, previous.startDate),
+          ),
+        );
       continueFrom =
-        summariseBlock({ goal: previous.goal as Goal, currentWeek: previous.currentWeek }, weeks, sessions.map(toSession))
-          .continueFrom ?? undefined;
+        summariseBlock(
+          { goal: previous.goal as Goal, currentWeek: previous.currentWeek },
+          weeks,
+          sessions.map(toSession),
+        ).continueFrom ?? undefined;
     }
 
     // A new goal is a change to the profile, not just to this block.
@@ -448,7 +487,10 @@ export const planRoutes = new Hono<AppEnv>()
     // The block that just ended is finished, not abandoned — it is the record
     // of what was actually done.
     if (previous && previous.status === 'active') {
-      await db.update(schema.plans).set({ status: 'completed' }).where(eq(schema.plans.id, previous.id));
+      await db
+        .update(schema.plans)
+        .set({ status: 'completed' })
+        .where(eq(schema.plans.id, previous.id));
     }
 
     const [plan] = await db
@@ -478,6 +520,36 @@ export const planRoutes = new Hono<AppEnv>()
     return c.json({ plan, weeks: generated.weeks });
   })
 
+  /**
+   * What a gap in training would do, without doing it.
+   *
+   * The step-back is a real change to someone's plan, so it is offered rather
+   * than applied behind their back. This is the read half; the POST below is
+   * what happens when they accept.
+   */
+  .get('/break-check', async (c) => {
+    const userId = c.get('userId');
+    const current = await activePlan(userId);
+    if (!current) return c.json({ onBreak: false });
+
+    const [latest] = await db
+      .select({ date: schema.workoutSessions.date })
+      .from(schema.workoutSessions)
+      .where(eq(schema.workoutSessions.userId, userId))
+      .orderBy(desc(schema.workoutSessions.date))
+      .limit(1);
+    if (!latest) return c.json({ onBreak: false });
+
+    const gapDays = daysBetween(latest.date, await todayFrom(c));
+    if (gapDays < 10) return c.json({ onBreak: false, gapDays });
+    return c.json({
+      onBreak: true,
+      gapDays,
+      lastSession: latest.date,
+      result: returnFromBreak(gapDays),
+    });
+  })
+
   /** FR-3.5: applies a proportional step-back after a gap in training. */
   .post('/return-from-break', async (c) => {
     const userId = c.get('userId');
@@ -492,11 +564,14 @@ export const planRoutes = new Hono<AppEnv>()
       .limit(1);
     if (!latest) return c.json({ applied: false, result: returnFromBreak(0) });
 
-    const gapDays = Math.floor((Date.now() - new Date(`${latest.date}T00:00:00Z`).getTime()) / 86_400_000);
+    const gapDays = daysBetween(latest.date, await todayFrom(c));
     const result = returnFromBreak(gapDays);
     if (result.stepBackWeeks > 0) {
       const back = Math.max(1, current.plan.currentWeek - result.stepBackWeeks);
-      await db.update(schema.plans).set({ currentWeek: back }).where(eq(schema.plans.id, current.plan.id));
+      await db
+        .update(schema.plans)
+        .set({ currentWeek: back })
+        .where(eq(schema.plans.id, current.plan.id));
     }
     return c.json({ applied: result.stepBackWeeks > 0, gapDays, result });
   });

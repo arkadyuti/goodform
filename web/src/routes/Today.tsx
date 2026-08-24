@@ -12,6 +12,8 @@ import {
   useSaveDailyLog,
   useSessions,
   useWeekDecision,
+  useBreakCheck,
+  useReturnFromBreak,
   useWeekReview,
 } from '../api/hooks.ts';
 import { dayName, scheduleFor, shiftDays, today } from '../lib/date.ts';
@@ -35,6 +37,7 @@ export function Today() {
   // gating the screen on `isPending` blanked all of Today the moment the plan
   // stopped being active.
   const { isLoading: reviewPending } = useWeekReview(planData?.plan?.status === 'active');
+  const { data: breakData } = useBreakCheck(planData?.plan?.status === 'active');
   const saveLog = useSaveDailyLog(date);
 
   const profile = profileData?.profile;
@@ -58,7 +61,13 @@ export function Today() {
 
   // Today is rendered as one piece once its data has settled. Letting cards
   // arrive one by one pushes the screen around under whoever is reading it.
-  const ready = !planPending && !reviewPending && !logPending && !nutritionPending && !sessionsPending && !rangePending;
+  const ready =
+    !planPending &&
+    !reviewPending &&
+    !logPending &&
+    !nutritionPending &&
+    !sessionsPending &&
+    !rangePending;
 
   return (
     <div className="flex flex-col gap-5 pt-1">
@@ -81,27 +90,42 @@ export function Today() {
       {!ready && <div className="min-h-[60dvh]" aria-busy="true" aria-label="Loading today" />}
 
       {ready && plan && plan.status === 'paused' && <PausedBanner reason={plan.pausedReason} />}
+      {ready && breakData?.onBreak && breakData.result && (
+        <WelcomeBack gapDays={breakData.gapDays ?? 0} result={breakData.result} />
+      )}
       {ready && plan && plan.status === 'completed' && <BlockCompleteBanner />}
       {ready && <WeekGate hasPlan={plan?.status === 'active'} />}
       {ready && targetsWithdrawn && <GuardrailNotice signals={settings?.guardrailSignals ?? []} />}
-
 
       {/* --- Today's session -------------------------------------------- */}
       {ready && scheduled === 'run' && week && plan?.status === 'active' && (
         <Card className="overflow-hidden !p-0">
           <div className="p-4">
             <div className="flex items-baseline justify-between gap-3">
-              <Eyebrow>Run · week {plan.currentWeek}{week.isDeload && ' · lighter'}</Eyebrow>
-              {runDone && <span className="text-[0.8125rem] font-semibold text-good">Done today</span>}
+              <Eyebrow>
+                Run · week {plan.currentWeek}
+                {week.isDeload && ' · lighter'}
+              </Eyebrow>
+              {runDone && (
+                <span className="text-[0.8125rem] font-semibold text-good">Done today</span>
+              )}
             </div>
             <p className="mt-2 flex items-baseline gap-2">
               <span className="tabular text-5xl" style={{ fontWeight: 800 }}>
                 {week.runSec / 60}
               </span>
-              <span className="text-ink-soft">min running, {week.walkSec / 60} min walking, × {week.reps}</span>
+              <span className="text-ink-soft">
+                min running, {week.walkSec / 60} min walking, × {week.reps}
+              </span>
             </p>
             <div className="mt-4">
-              <IntervalRibbon runSec={week.runSec} walkSec={week.walkSec} reps={week.reps} height={16} label />
+              <IntervalRibbon
+                runSec={week.runSec}
+                walkSec={week.walkSec}
+                reps={week.reps}
+                height={16}
+                label
+              />
             </div>
           </div>
           <Button
@@ -119,28 +143,38 @@ export function Today() {
           <div className="p-4">
             <div className="flex items-baseline justify-between gap-3">
               <Eyebrow>Strength</Eyebrow>
-              {strengthDone && <span className="text-[0.8125rem] font-semibold text-good">Done today</span>}
+              {strengthDone && (
+                <span className="text-[0.8125rem] font-semibold text-good">Done today</span>
+              )}
             </div>
             <p className="mt-2 text-[1.0625rem] leading-snug">
-              Calves, shins and single-leg control — the tissue that decides whether you are still running in six
-              months.
+              Calves, shins and single-leg control — the tissue that decides whether you are still
+              running in six months.
             </p>
             <p className="mt-1.5 text-[0.875rem] text-ink-soft">About 15 minutes.</p>
           </div>
-          <Button full className="!rounded-none py-4 text-[1.0625rem]" onClick={() => navigate('/session/strength')}>
+          <Button
+            full
+            className="!rounded-none py-4 text-[1.0625rem]"
+            onClick={() => navigate('/session/strength')}
+          >
             {strengthDone ? 'Do it again' : 'Start strength'}
           </Button>
         </Card>
       )}
 
-      {ready && scheduled !== 'rest' && plan?.status === 'active' && profile && settings?.fuellingTips && (
-        <Fuelling
-          sessionTime={settings.sessionTime}
-          sessionType={scheduled}
-          dietaryPattern={profile.dietaryPattern}
-          sessionDone={scheduled === 'run' ? runDone : strengthDone}
-        />
-      )}
+      {ready &&
+        scheduled !== 'rest' &&
+        plan?.status === 'active' &&
+        profile &&
+        settings?.fuellingTips && (
+          <Fuelling
+            sessionTime={settings.sessionTime}
+            sessionType={scheduled}
+            dietaryPattern={profile.dietaryPattern}
+            sessionDone={scheduled === 'run' ? runDone : strengthDone}
+          />
+        )}
 
       {ready && <DueNow />}
 
@@ -155,7 +189,9 @@ export function Today() {
       {ready && !plan && (
         <Card>
           <Eyebrow>No plan yet</Eyebrow>
-          <p className="mt-2 leading-snug">Finish your baseline assessment and GoodForm will build your block.</p>
+          <p className="mt-2 leading-snug">
+            Finish your baseline assessment and GoodForm will build your block.
+          </p>
           <Button className="mt-3" onClick={() => navigate('/onboarding')}>
             Finish setup
           </Button>
@@ -203,71 +239,74 @@ export function Today() {
 
       {/* --- Habits ------------------------------------------------------- */}
       {ready && (
-      <Card>
-        <Eyebrow>Today's log</Eyebrow>
-        <div className="mt-1 divide-y divide-line">
-          {tracked.includes('water') && (
-            <Stepper
-              label="Water"
-              value={log.waterMl}
-              unit="ml"
-              step={250}
-              max={10000}
-              onChange={(waterMl) => saveLog.mutate({ ...log, waterMl })}
-            />
-          )}
-          {tracked.includes('cigarettes') && (
-            <Stepper
-              label="Cigarettes"
-              value={log.cigarettes}
-              tone="watch"
-              max={100}
-              onChange={(cigarettes) => saveLog.mutate({ ...log, cigarettes })}
-            />
-          )}
-          {tracked.includes('beer') && (
-            <Stepper
-              label="Beer"
-              value={log.beers}
-              unit={log.beers === 1 ? 'drink' : 'drinks'}
-              tone="watch"
-              max={50}
-              onChange={(beers) => saveLog.mutate({ ...log, beers })}
-            />
-          )}
-          {tracked.includes('alcohol') && (
-            <Stepper
-              label="Other alcohol"
-              value={log.alcoholUnits}
-              unit="units"
-              tone="watch"
-              max={50}
-              onChange={(alcoholUnits) => saveLog.mutate({ ...log, alcoholUnits })}
-            />
-          )}
-          {tracked.includes('sleep') && (
-            <Stepper
-              label="Sleep last night"
-              value={log.sleepHours ?? 0}
-              unit="hours"
-              step={0.5}
-              max={24}
-              onChange={(sleepHours) => saveLog.mutate({ ...log, sleepHours })}
-            />
-          )}
-          {(settings?.customHabits ?? []).map((habit) => (
-            <Stepper
-              key={habit.key}
-              label={habit.label}
-              value={log.customHabits[habit.key] ?? 0}
-              unit={habit.unit}
-              onChange={(next) =>
-                saveLog.mutate({ ...log, customHabits: { ...log.customHabits, [habit.key]: next } })
-              }
-            />
-          ))}
-        </div>
-      </Card>
+        <Card>
+          <Eyebrow>Today's log</Eyebrow>
+          <div className="mt-1 divide-y divide-line">
+            {tracked.includes('water') && (
+              <Stepper
+                label="Water"
+                value={log.waterMl}
+                unit="ml"
+                step={250}
+                max={10000}
+                onChange={(waterMl) => saveLog.mutate({ ...log, waterMl })}
+              />
+            )}
+            {tracked.includes('cigarettes') && (
+              <Stepper
+                label="Cigarettes"
+                value={log.cigarettes}
+                tone="watch"
+                max={100}
+                onChange={(cigarettes) => saveLog.mutate({ ...log, cigarettes })}
+              />
+            )}
+            {tracked.includes('beer') && (
+              <Stepper
+                label="Beer"
+                value={log.beers}
+                unit={log.beers === 1 ? 'drink' : 'drinks'}
+                tone="watch"
+                max={50}
+                onChange={(beers) => saveLog.mutate({ ...log, beers })}
+              />
+            )}
+            {tracked.includes('alcohol') && (
+              <Stepper
+                label="Other alcohol"
+                value={log.alcoholUnits}
+                unit="units"
+                tone="watch"
+                max={50}
+                onChange={(alcoholUnits) => saveLog.mutate({ ...log, alcoholUnits })}
+              />
+            )}
+            {tracked.includes('sleep') && (
+              <Stepper
+                label="Sleep last night"
+                value={log.sleepHours ?? 0}
+                unit="hours"
+                step={0.5}
+                max={24}
+                onChange={(sleepHours) => saveLog.mutate({ ...log, sleepHours })}
+              />
+            )}
+            {(settings?.customHabits ?? []).map((habit) => (
+              <Stepper
+                key={habit.key}
+                label={habit.label}
+                value={log.customHabits[habit.key] ?? 0}
+                unit={habit.unit}
+                onChange={(next) =>
+                  saveLog.mutate({
+                    ...log,
+                    customHabits: { ...log.customHabits, [habit.key]: next },
+                  })
+                }
+              />
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* --- Quit support -------------------------------------------------- */}
@@ -276,10 +315,10 @@ export function Today() {
       {ready && <WeeklyCheckIn />}
 
       {ready && (
-      <p className="px-1 pt-2 text-[0.75rem] leading-relaxed text-ink-faint">
-        GoodForm gives general fitness guidance. It is not medical advice and does not replace a doctor or
-        physiotherapist.
-      </p>
+        <p className="px-1 pt-2 text-[0.75rem] leading-relaxed text-ink-faint">
+          GoodForm gives general fitness guidance. It is not medical advice and does not replace a
+          doctor or physiotherapist.
+        </p>
       )}
     </div>
   );
@@ -300,8 +339,21 @@ function ProteinDial({ value, target }: { value: number; target: number }) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden className="shrink-0">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--color-chalk-deep)" strokeWidth={stroke} />
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      aria-hidden
+      className="shrink-0"
+    >
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="var(--color-chalk-deep)"
+        strokeWidth={stroke}
+      />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -339,7 +391,9 @@ function RestDay({
   const [asking, setAsking] = useState(false);
   const date = today();
 
-  const runs = sessions.filter((s) => (s.type === 'run' || s.type === 'baseline') && s.completion !== 'skipped');
+  const runs = sessions.filter(
+    (s) => (s.type === 'run' || s.type === 'baseline') && s.completion !== 'skipped',
+  );
   const ranYesterday = runs.some((s) => s.date === shiftDays(date, -1));
   const weekStart = startOfWeek(date);
   const runsThisWeek = runs.filter((s) => s.date >= weekStart && s.date <= date).length;
@@ -350,11 +404,25 @@ function RestDay({
       ? `That would be your fourth run this week. Weekly running time is meant to grow by no more than a tenth, and a fourth session is a much bigger jump than that.`
       : 'Fine — a rest day moved is not a rest day skipped. Try to keep a clear day either side of it.';
 
+  // Two days in seven, a brand new plan lands here first. "Adaptation happens
+  // now" is true of a rest day between sessions and nonsense on day zero — you
+  // have not done anything yet — so the first one says where the plan starts
+  // instead.
+  const nothingLoggedYet = runs.length === 0;
+  const firstRun = nextRunDate(date);
+
   return (
     <Card>
-      <Eyebrow>Rest day</Eyebrow>
+      <Eyebrow>{nothingLoggedYet ? 'Nothing today' : 'Rest day'}</Eyebrow>
       <p className="mt-2 text-[1.0625rem] leading-snug">
-        Nothing scheduled. Adaptation happens now, not during the run.
+        {nothingLoggedYet ? (
+          <>
+            Your first run is <span style={{ fontWeight: 600 }}>{dayName(firstRun)}</span>. Have a
+            look at week one now, so nothing is a surprise on the day.
+          </>
+        ) : (
+          'Nothing scheduled. Adaptation happens now, not during the run.'
+        )}
       </p>
 
       {hasPlan &&
@@ -375,8 +443,65 @@ function RestDay({
         ))}
 
       <Link to="/plan" className="mt-3 block text-[0.875rem] text-run underline underline-offset-4">
-        See the week ahead
+        {nothingLoggedYet ? 'See week one' : 'See the week ahead'}
       </Link>
+    </Card>
+  );
+}
+
+/** The next day the plan asks for a run, starting from tomorrow. */
+function nextRunDate(from: string): string {
+  for (let i = 1; i <= 7; i++) {
+    const candidate = shiftDays(from, i);
+    if (scheduleFor(candidate) === 'run') return candidate;
+  }
+  return shiftDays(from, 1);
+}
+
+/**
+ * A gap in training, acknowledged.
+ *
+ * Coming back after three weeks off used to show the same week you left and a
+ * session card asking for intervals you could no longer do — the step-back
+ * rule, its copy and its endpoint all existed and nothing ever called them.
+ * It is offered rather than applied, because it is the runner's plan.
+ */
+function WelcomeBack({
+  gapDays,
+  result,
+}: {
+  gapDays: number;
+  result: { stepBackWeeks: number; needsReassessment: boolean; reason: string };
+}) {
+  const apply = useReturnFromBreak();
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+
+  return (
+    <Card className="border-ink">
+      <Eyebrow>Welcome back</Eyebrow>
+      <p className="mt-1.5 text-[1.0625rem] leading-snug">
+        {gapDays} days since your last session. Nothing about that needs explaining.
+      </p>
+      <p className="mt-2 leading-relaxed text-ink-soft">{result.reason}</p>
+
+      {result.needsReassessment ? (
+        <Link
+          to="/reassess"
+          className="tap mt-3 flex items-center justify-center rounded-xl bg-ink px-5 font-medium text-chalk transition-colors hover:bg-ink/90"
+        >
+          Set a fresh starting point
+        </Link>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button disabled={apply.isPending} onClick={() => apply.mutate()}>
+            {result.stepBackWeeks > 0 ? 'Step the plan back' : 'Pick up where I left off'}
+          </Button>
+          <Button variant="quiet" onClick={() => setDismissed(true)}>
+            Keep me where I was
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -387,7 +512,8 @@ function BlockCompleteBanner() {
     <Card className="border-ink">
       <Eyebrow>Block complete</Eyebrow>
       <p className="mt-1.5 text-[1.0625rem] leading-snug">
-        You finished the block. What comes next is worth a minute's thought rather than an automatic next week.
+        You finished the block. What comes next is worth a minute's thought rather than an automatic
+        next week.
       </p>
       <Link
         to="/reassess"
@@ -403,7 +529,11 @@ function BlockCompleteBanner() {
  * P3: the numeric targets have been withdrawn. This says so plainly, once, and
  * offers a way back — it does not diagnose anybody and it does not argue.
  */
-function GuardrailNotice({ signals }: { signals: { id: string; label: string; detail: string }[] }) {
+function GuardrailNotice({
+  signals,
+}: {
+  signals: { id: string; label: string; detail: string }[];
+}) {
   const [open, setOpen] = useState(false);
   return (
     <Card className="border-walk bg-walk-wash">
@@ -437,8 +567,14 @@ function PausedBanner({ reason }: { reason: string | null }) {
   return (
     <Card className="border-alert bg-alert-wash">
       <Eyebrow className="!text-alert">Progression paused</Eyebrow>
-      <p className="mt-1.5 leading-snug text-ink">{reason ?? 'Resting until discomfort settles.'}</p>
-      <Button variant="secondary" className="mt-3" onClick={() => decide.mutate({ action: 'resume' })}>
+      <p className="mt-1.5 leading-snug text-ink">
+        {reason ?? 'Resting until discomfort settles.'}
+      </p>
+      <Button
+        variant="secondary"
+        className="mt-3"
+        onClick={() => decide.mutate({ action: 'resume' })}
+      >
         It has settled — resume
       </Button>
     </Card>
@@ -510,7 +646,9 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
         {gate.overridable && (
           <Button
             variant="secondary"
-            onClick={() => (showRisk ? decide.mutate({ action: 'advance', override: true }) : setShowRisk(true))}
+            onClick={() =>
+              showRisk ? decide.mutate({ action: 'advance', override: true }) : setShowRisk(true)
+            }
           >
             {showRisk ? 'Yes, move on anyway' : 'Move on to week ' + (data.week.index + 1)}
           </Button>
@@ -518,8 +656,9 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
       </div>
       {showRisk && (
         <Note tone="alert">
-          Tendons and bone take three to six months to adapt — far longer than your lungs. Pushing through
-          discomfort is the most common way beginners end up stopping altogether. It is still your call.
+          Tendons and bone take three to six months to adapt — far longer than your lungs. Pushing
+          through discomfort is the most common way beginners end up stopping altogether. It is
+          still your call.
         </Note>
       )}
     </Card>
@@ -531,7 +670,10 @@ function QuitSupport({
   settings,
 }: {
   logs: { date: string; cigarettes: number; alcoholUnits: number; beers: number }[];
-  settings: { smokingBaselinePerDay: number | null; cigaretteCost: number | null; currency: string } | null | undefined;
+  settings:
+    | { smokingBaselinePerDay: number | null; cigaretteCost: number | null; currency: string }
+    | null
+    | undefined;
 }) {
   const stats = useMemo(() => {
     if (!logs.length) return null;
@@ -551,10 +693,16 @@ function QuitSupport({
       <Eyebrow>Holding</Eyebrow>
       <div className="mt-2 grid grid-cols-2 gap-4">
         {stats.smokeFree > 0 && (
-          <Stat value={stats.smokeFree} label={stats.smokeFree === 1 ? 'day smoke-free' : 'days smoke-free'} />
+          <Stat
+            value={stats.smokeFree}
+            label={stats.smokeFree === 1 ? 'day smoke-free' : 'days smoke-free'}
+          />
         )}
         {stats.drinkFree > 0 && (
-          <Stat value={stats.drinkFree} label={stats.drinkFree === 1 ? 'day alcohol-free' : 'days alcohol-free'} />
+          <Stat
+            value={stats.drinkFree}
+            label={stats.drinkFree === 1 ? 'day alcohol-free' : 'days alcohol-free'}
+          />
         )}
         {stats.saved > 0 && (
           <Stat value={Math.round(stats.saved)} label={`${stats.currency} not spent`} />

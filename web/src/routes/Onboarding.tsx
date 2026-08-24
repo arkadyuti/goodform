@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Profile, ScreeningFlag, StopReason } from '@goodform/shared';
-import { proteinTarget } from '@goodform/shared';
+import { daysFor, listDays, proteinTarget } from '@goodform/shared';
 import {
   useGeneratePlan,
   useProfile,
@@ -16,17 +16,49 @@ import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
 import { BaselineRun, StopReasonChoice } from '../components/BaselineRun.tsx';
 
 const SCREENING_QUESTIONS: { flag: ScreeningFlag; question: string }[] = [
-  { flag: 'heart_condition', question: 'Has a doctor ever said you have a heart condition, or that you should only do physical activity supervised by a doctor?' },
-  { flag: 'chest_pain', question: 'Do you get chest pain at rest, during daily activity, or when you exert yourself?' },
-  { flag: 'dizziness', question: 'Do you lose balance from dizziness, or have you lost consciousness in the last 12 months?' },
-  { flag: 'bone_or_joint_problem', question: 'Do you have a bone or joint problem that could be made worse by running?' },
-  { flag: 'bp_or_heart_medication', question: 'Are you currently prescribed medication for blood pressure or a heart condition?' },
-  { flag: 'pregnancy', question: 'Are you pregnant, or have you given birth in the last six months?' },
-  { flag: 'other_reason', question: 'Do you know of any other reason why you should not do physical activity?' },
+  {
+    flag: 'heart_condition',
+    question:
+      'Has a doctor ever said you have a heart condition, or that you should only do physical activity supervised by a doctor?',
+  },
+  {
+    flag: 'chest_pain',
+    question: 'Do you get chest pain at rest, during daily activity, or when you exert yourself?',
+  },
+  {
+    flag: 'dizziness',
+    question:
+      'Do you lose balance from dizziness, or have you lost consciousness in the last 12 months?',
+  },
+  {
+    flag: 'bone_or_joint_problem',
+    question: 'Do you have a bone or joint problem that could be made worse by running?',
+  },
+  {
+    flag: 'bp_or_heart_medication',
+    question: 'Are you currently prescribed medication for blood pressure or a heart condition?',
+  },
+  {
+    flag: 'pregnancy',
+    question: 'Are you pregnant, or have you given birth in the last six months?',
+  },
+  {
+    flag: 'other_reason',
+    question: 'Do you know of any other reason why you should not do physical activity?',
+  },
 ];
 
 type Step = 'about' | 'body' | 'habits' | 'history' | 'goal' | 'screening' | 'baseline' | 'reveal';
-const ORDER: Step[] = ['about', 'body', 'habits', 'history', 'goal', 'screening', 'baseline', 'reveal'];
+const ORDER: Step[] = [
+  'about',
+  'body',
+  'habits',
+  'history',
+  'goal',
+  'screening',
+  'baseline',
+  'reveal',
+];
 const STEP_NAMES: Record<Step, string> = {
   about: 'About you',
   body: 'Body',
@@ -50,13 +82,13 @@ const EMPTY_PROFILE: Partial<Profile> = {
 function isComplete(draft: Partial<Profile>): draft is Profile {
   return Boolean(
     draft.age &&
-      draft.sexAtBirth &&
-      draft.heightCm &&
-      draft.weightKg &&
-      draft.dietaryPattern &&
-      draft.activityLevel &&
-      draft.smokingStatus &&
-      draft.goal,
+    draft.sexAtBirth &&
+    draft.heightCm &&
+    draft.weightKg &&
+    draft.dietaryPattern &&
+    draft.activityLevel &&
+    draft.smokingStatus &&
+    draft.goal,
   );
 }
 
@@ -92,7 +124,10 @@ export function Onboarding() {
   );
   /** Furthest step reached, so finished steps stay reachable from the stepper. */
   const [furthest, setFurthest] = useState(saved?.furthest ?? 0);
-  const [plan, setPlan] = useState<{ weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[]; reasons: string[] } | null>(null);
+  const [plan, setPlan] = useState<{
+    weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[];
+    reasons: string[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const stepIndex = ORDER.indexOf(step);
@@ -120,10 +155,20 @@ export function Onboarding() {
   useEffect(() => {
     if (step === 'reveal') return;
     if (!userId) return;
-    saveDraft(userId, { step, furthest, profile: draft, flags, acknowledged, minutesRun, stopReason, baselineMode });
+    saveDraft(userId, {
+      step,
+      furthest,
+      profile: draft,
+      flags,
+      acknowledged,
+      minutesRun,
+      stopReason,
+      baselineMode,
+    });
   }, [userId, step, furthest, draft, flags, acknowledged, minutesRun, stopReason, baselineMode]);
 
-  const set = <K extends keyof Profile>(key: K, value: Profile[K]) => setDraft((d) => ({ ...d, [key]: value }));
+  const set = <K extends keyof Profile>(key: K, value: Profile[K]) =>
+    setDraft((d) => ({ ...d, [key]: value }));
 
   const go = (next: Step) => {
     setError(null);
@@ -178,7 +223,13 @@ export function Onboarding() {
       await saveBaseline.mutateAsync({ minutesRun: finalMinutes, stopReason: finalReason });
       const result = (await generatePlan.mutateAsync()) as {
         plan: { conservatismReasons: string[] };
-        weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[];
+        weeks: {
+          index: number;
+          runSec: number;
+          walkSec: number;
+          reps: number;
+          isDeload: boolean;
+        }[];
       };
       setPlan({ weeks: result.weeks, reasons: result.plan.conservatismReasons });
       clearDraft(userId);
@@ -278,15 +329,15 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Next
-            disabled={!draft.age || !draft.sexAtBirth}
-            onClick={() => go('body')}
-          />
+          <Next disabled={!draft.age || !draft.sexAtBirth} onClick={() => go('body')} />
         </Section>
       )}
 
       {step === 'body' && (
-        <Section title="Height and weight" blurb="Weight sets your daily protein target. It is context, never a target we set for you.">
+        <Section
+          title="Height and weight"
+          blurb="Weight sets your daily protein target. It is context, never a target we set for you."
+        >
           <div className="grid grid-cols-2 gap-3">
             <Field label="Height (cm)">
               <TextInput
@@ -307,8 +358,8 @@ export function Onboarding() {
           </div>
           {draft.weightKg ? (
             <Note tone="run">
-              Your protein target will be about {proteinTarget(draft.weightKg).targetG} g a day. That is the one
-              nutrition number GoodForm tracks — no calorie counting.
+              Your protein target will be about {proteinTarget(draft.weightKg).targetG} g a day.
+              That is the one nutrition number GoodForm tracks — no calorie counting.
             </Note>
           ) : null}
           <Field label="What do you eat?" group>
@@ -325,7 +376,10 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Next disabled={!draft.heightCm || !draft.weightKg || !draft.dietaryPattern} onClick={() => go('habits')} />
+          <Next
+            disabled={!draft.heightCm || !draft.weightKg || !draft.dietaryPattern}
+            onClick={() => go('habits')}
+          />
         </Section>
       )}
 
@@ -372,7 +426,10 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Next disabled={!draft.activityLevel || !draft.smokingStatus} onClick={() => go('history')} />
+          <Next
+            disabled={!draft.activityLevel || !draft.smokingStatus}
+            onClick={() => go('history')}
+          />
         </Section>
       )}
 
@@ -402,7 +459,11 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Field label="What do you have at home?" hint="Strength work is built from what you actually own." group>
+          <Field
+            label="What do you have at home?"
+            hint="Strength work is built from what you actually own."
+            group
+          >
             <Choices
               multiple
               columns={2}
@@ -423,19 +484,34 @@ export function Onboarding() {
       )}
 
       {step === 'goal' && (
-        <Section title="What are you after?" blurb="This sets the length and shape of your first block.">
+        <Section
+          title="What are you after?"
+          blurb="This sets the length and shape of your first block."
+        >
           <Choices
             value={draft.goal ?? []}
             onChange={([v]) => v && set('goal', v)}
             options={[
-              { value: 'first_continuous_run', label: 'Run without stopping', hint: 'The first real milestone for most beginners' },
+              {
+                value: 'first_continuous_run',
+                label: 'Run without stopping',
+                hint: 'The first real milestone for most beginners',
+              },
               { value: 'five_k', label: 'Get to 5K' },
               { value: 'ten_k', label: 'Get to 10K' },
-              { value: 'general_fitness', label: 'General fitness', hint: 'Running as the means, not the end' },
+              {
+                value: 'general_fitness',
+                label: 'General fitness',
+                hint: 'Running as the means, not the end',
+              },
               { value: 'return_after_break', label: 'Come back after a break' },
             ]}
           />
-          <Next disabled={!draft.goal || saveProfile.isPending} onClick={finishProfile} label="Save and continue" />
+          <Next
+            disabled={!draft.goal || saveProfile.isPending}
+            onClick={finishProfile}
+            label="Save and continue"
+          />
         </Section>
       )}
 
@@ -456,7 +532,9 @@ export function Onboarding() {
                     setFlags(active ? flags.filter((f) => f !== q.flag) : [...flags, q.flag])
                   }
                   className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
-                    active ? 'border-alert bg-alert-wash' : 'border-line bg-paper hover:border-ink-faint'
+                    active
+                      ? 'border-alert bg-alert-wash'
+                      : 'border-line bg-paper hover:border-ink-faint'
                   }`}
                 >
                   <span
@@ -472,15 +550,17 @@ export function Onboarding() {
               );
             })}
           </div>
-          <p className="text-[0.8125rem] text-ink-faint">Tap any that are true for you. Leave them all untapped if none are.</p>
+          <p className="text-[0.8125rem] text-ink-faint">
+            Tap any that are true for you. Leave them all untapped if none are.
+          </p>
 
           {flags.length > 0 && (
             <>
               <Note tone="alert">
                 <strong className="block">Speak to a doctor before you start.</strong>
-                Based on what you've told us, a generated plan is not the right starting point. A short
-                conversation with a GP or physiotherapist first is genuinely worth it — GoodForm cannot assess
-                you and will not pretend otherwise.
+                Based on what you've told us, a generated plan is not the right starting point. A
+                short conversation with a GP or physiotherapist first is genuinely worth it —
+                GoodForm cannot assess you and will not pretend otherwise.
               </Note>
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-paper p-3.5">
                 <input
@@ -543,8 +623,8 @@ export function Onboarding() {
                 ]}
               />
               <p className="text-[0.8125rem] leading-relaxed text-ink-faint">
-                You can change this later. Guessing low is safe — if the first weeks turn out easy, the plan
-                moves you up quickly.
+                You can change this later. Guessing low is safe — if the first weeks turn out easy,
+                the plan moves you up quickly.
               </p>
             </>
           )}
@@ -576,14 +656,19 @@ export function Onboarding() {
 
               {stopReason === 'legs' && (
                 <Note tone="run">
-                  Legs first means we build slower. Lungs recover in weeks; tendons and bone take months, and
-                  they set the pace.
+                  Legs first means we build slower. Lungs recover in weeks; tendons and bone take
+                  months, and they set the pace.
                 </Note>
               )}
 
               {error && <Note tone="alert">{error}</Note>}
               <Next
-                disabled={minutesRun === '' || !stopReason || saveBaseline.isPending || generatePlan.isPending}
+                disabled={
+                  minutesRun === '' ||
+                  !stopReason ||
+                  saveBaseline.isPending ||
+                  generatePlan.isPending
+                }
                 onClick={() => finishBaseline()}
                 label={generatePlan.isPending ? 'Building your plan' : 'Build my plan'}
               />
@@ -597,8 +682,9 @@ export function Onboarding() {
             <>
               <Note>
                 <strong className="block text-ink">We'll start from walking.</strong>
-                Your first sessions are one minute of very slow running at a time, with a longer walk in
-                between each one. If that turns out to be easy, the plan moves up on its own.
+                Your first sessions are one minute of very slow running at a time, with a longer
+                walk in between each one. If that turns out to be easy, the plan moves up on its
+                own.
               </Note>
               {error && <Note tone="alert">{error}</Note>}
               <Next
@@ -621,16 +707,39 @@ export function Onboarding() {
             {plan.weeks.length} weeks, three runs a week
           </h1>
           <p className="mt-3 leading-relaxed text-ink-soft">
-            Here is the whole thing, start to finish. Each bar shows one session to scale — cobalt is running,
-            amber is walking. Nothing is hidden and nothing gets sprung on you.
+            Here is the whole thing, start to finish. Each bar shows one session to scale — cobalt
+            is running, amber is walking. Nothing is hidden and nothing gets sprung on you.
           </p>
+
+          {/*
+            The week has a fixed shape and the app used to keep it to itself,
+            so someone who works Saturdays met an app calling their training
+            days rest days and never found out why.
+          */}
+          <div className="mt-4 rounded-xl border border-line bg-paper p-4">
+            <Eyebrow>How the week is laid out</Eyebrow>
+            <p className="mt-2 leading-relaxed text-ink-soft">
+              Runs land on <span className="text-ink">{listDays(daysFor('run'))}</span>.{' '}
+              <span className="text-ink">{listDays(daysFor('strength'))}</span> are short strength
+              sessions, about 15 minutes each.{' '}
+              <span className="text-ink">{listDays(daysFor('rest'))}</span> are rest — and rest is
+              where the adaptation actually happens.
+            </p>
+            <p className="mt-2 leading-relaxed text-ink-soft">
+              You can run on a different day whenever life needs you to; the app will tell you what
+              it thinks and then get out of the way.
+            </p>
+          </div>
 
           {plan.reasons.length > 0 && (
             <div className="mt-6 rounded-xl border border-line bg-paper p-4">
               <Eyebrow>Why your plan starts where it does</Eyebrow>
               <ul className="mt-2.5 flex flex-col gap-2">
                 {plan.reasons.map((reason) => (
-                  <li key={reason} className="flex gap-2.5 text-[0.9375rem] leading-snug text-ink-soft">
+                  <li
+                    key={reason}
+                    className="flex gap-2.5 text-[0.9375rem] leading-snug text-ink-soft"
+                  >
                     <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-walk" />
                     {reason}
                   </li>
@@ -642,14 +751,19 @@ export function Onboarding() {
           <ol className="mt-6 flex flex-col gap-3.5">
             {plan.weeks.map((week) => (
               <li key={week.index} className="flex items-center gap-3.5">
-                <span className="tabular w-7 shrink-0 text-right text-sm text-ink-faint">{week.index}</span>
+                <span className="tabular w-7 shrink-0 text-right text-sm text-ink-faint">
+                  {week.index}
+                </span>
                 <div className="min-w-0 flex-1">
                   <IntervalRibbon
                     runSec={week.runSec}
                     walkSec={week.walkSec}
                     reps={week.reps}
                     height={14}
-                    scaleToSec={Math.max(...plan.weeks.map((w) => (w.runSec + w.walkSec) * w.reps), 1)}
+                    scaleToSec={Math.max(
+                      ...plan.weeks.map((w) => (w.runSec + w.walkSec) * w.reps),
+                      1,
+                    )}
                   />
                   <p className="mt-1 text-[0.8125rem] text-ink-faint">
                     {week.runSec / 60} min run · {week.walkSec / 60} min walk · × {week.reps}
@@ -661,8 +775,8 @@ export function Onboarding() {
           </ol>
 
           <Note tone="run">
-            Tendons and bone take three to six months to adapt — far longer than your lungs. Weeks where you
-            repeat rather than progress are the plan working, not you failing.
+            Tendons and bone take three to six months to adapt — far longer than your lungs. Weeks
+            where you repeat rather than progress are the plan working, not you failing.
           </Note>
 
           <Button
@@ -681,7 +795,15 @@ export function Onboarding() {
   );
 }
 
-function Section({ title, blurb, children }: { title: string; blurb: string; children: React.ReactNode }) {
+function Section({
+  title,
+  blurb,
+  children,
+}: {
+  title: string;
+  blurb: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -695,7 +817,15 @@ function Section({ title, blurb, children }: { title: string; blurb: string; chi
   );
 }
 
-function Next({ onClick, disabled, label = 'Continue' }: { onClick: () => void; disabled?: boolean; label?: string }) {
+function Next({
+  onClick,
+  disabled,
+  label = 'Continue',
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  label?: string;
+}) {
   return (
     <Button full className="mt-1 py-3.5" onClick={onClick} disabled={disabled}>
       {label}
