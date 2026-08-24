@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { toggleChoice } from '../lib/choices.ts';
 
@@ -68,7 +69,7 @@ export function Stepper({
         <p className="truncate text-[0.9375rem]">{label}</p>
         <p className="tabular text-2xl leading-tight" style={{ fontWeight: 600 }}>
           <span className={tone === 'watch' && value > 0 ? 'text-alert' : ''}>{value}</span>
-          {unit && <span className="ml-1 text-sm font-normal text-ink-faint">{unit}</span>}
+          {unit && <span className="ml-1 text-sm font-normal text-ink-faint">{' '}{unit}</span>}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -98,15 +99,53 @@ export function Field({
   label,
   hint,
   children,
+  /**
+   * Set when the field holds a set of controls rather than one input — a chip
+   * group, say. A `<label>` may only name a single control, so wrapping several
+   * buttons in one makes the browser hand the whole label, hint and all, to
+   * whichever button comes first: the first chip in the sex question was
+   * announced as "Sex at birth Used for protein and iron guidance only. Female
+   * Intersex". A named group says it correctly instead.
+   */
+  group = false,
 }: {
   label: string;
   hint?: string;
   children: ReactNode;
+  group?: boolean;
 }) {
+  const id = useId();
+  const body = (
+    <>
+      <span className="eyebrow" id={group ? id : undefined}>
+        {label}
+      </span>
+      {hint && (
+        <span className="mt-0.5 block text-[0.8125rem] text-ink-soft" id={group ? `${id}-hint` : undefined}>
+          {hint}
+        </span>
+      )}
+    </>
+  );
+
+  if (group) {
+    return (
+      <div className="block">
+        {body}
+        <div
+          className="mt-1.5"
+          role="group"
+          aria-labelledby={hint ? `${id} ${id}-hint` : id}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <label className="block">
-      <span className="eyebrow">{label}</span>
-      {hint && <span className="mt-0.5 block text-[0.8125rem] text-ink-soft">{hint}</span>}
+      {body}
       <div className="mt-1.5">{children}</div>
     </label>
   );

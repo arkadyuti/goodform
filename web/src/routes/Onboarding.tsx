@@ -266,7 +266,7 @@ export function Onboarding() {
               onChange={(e) => set('age', Number(e.target.value))}
             />
           </Field>
-          <Field label="Sex at birth" hint="Used for protein and iron guidance only.">
+          <Field label="Sex at birth" hint="Used for protein and iron guidance only." group>
             <Choices
               columns={2}
               value={draft.sexAtBirth ?? []}
@@ -311,7 +311,7 @@ export function Onboarding() {
               nutrition number GoodForm tracks — no calorie counting.
             </Note>
           ) : null}
-          <Field label="What do you eat?">
+          <Field label="What do you eat?" group>
             <Choices
               value={draft.dietaryPattern ?? []}
               onChange={([v]) => v && set('dietaryPattern', v)}
@@ -334,7 +334,7 @@ export function Onboarding() {
           title="Where you're starting from"
           blurb="Answer honestly — this changes the plan, and a plan built on a flattering answer is the one that injures you."
         >
-          <Field label="Current activity">
+          <Field label="Current activity" group>
             <Choices
               value={draft.activityLevel ?? []}
               onChange={([v]) => v && set('activityLevel', v)}
@@ -346,7 +346,7 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Field label="Smoking">
+          <Field label="Smoking" group>
             <Choices
               columns={2}
               value={draft.smokingStatus ?? []}
@@ -359,7 +359,7 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Field label="Alcohol">
+          <Field label="Alcohol" group>
             <Choices
               columns={2}
               value={draft.alcoholFrequency ?? []}
@@ -384,6 +384,7 @@ export function Onboarding() {
           <Field
             label="Have any of these given you trouble?"
             hint="Select any that apply, or leave them all unselected if nothing has."
+            group
           >
             <Choices
               multiple
@@ -401,7 +402,7 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Field label="What do you have at home?" hint="Strength work is built from what you actually own.">
+          <Field label="What do you have at home?" hint="Strength work is built from what you actually own." group>
             <Choices
               multiple
               columns={2}

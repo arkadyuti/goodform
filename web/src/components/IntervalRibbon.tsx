@@ -15,6 +15,23 @@ interface Props {
   scaleToSec?: number;
 }
 
+/** Minutes, matching the numbers printed beside the ribbon: 90s reads "1.5". */
+function minutes(seconds: number): string {
+  return String(Number((seconds / 60).toFixed(2)));
+}
+
+/**
+ * What the ribbon says to a screen reader.
+ *
+ * It has to agree with the label printed next to it. Rounding to whole minutes
+ * here used to describe a 90-second walk as "2 minutes", so the two disagreed
+ * and the spoken version was simply wrong.
+ */
+function ribbonLabel(runSec: number, walkSec: number, reps: number): string {
+  const set = `${minutes(runSec)} minutes running and ${minutes(walkSec)} minutes walking`;
+  return reps === 1 ? `One round of ${set}` : `${reps} rounds of ${set}`;
+}
+
 /**
  * The shape of a session, drawn to scale: cobalt run blocks against amber
  * walks. The same ribbon runs across the plan so a runner can see the block
@@ -48,7 +65,7 @@ export function IntervalRibbon({
         className={`relative flex w-full gap-px overflow-hidden rounded-full ${onColor ? 'bg-white/15' : ''}`}
         style={{ height }}
         role="img"
-        aria-label={`${reps} repetitions of ${Math.round(runSec / 60)} minutes running and ${Math.round(walkSec / 60)} minutes walking`}
+        aria-label={ribbonLabel(runSec, walkSec, reps)}
       >
         {segments.map((segment, i) => (
           <div
