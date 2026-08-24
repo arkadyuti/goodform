@@ -157,7 +157,7 @@ export const regimenRoutes = new Hono<AppEnv>()
   /** Everything due on a day, with what has already been logged against it. */
   .get('/due', async (c) => {
     const userId = c.get('userId');
-    const date = todayFrom(c);
+    const date = await todayFrom(c);
     const nowTime = c.req.query('time');
     const items = await loadActiveItems(userId);
     const events = await loadEvents(userId, date, date);
@@ -279,7 +279,7 @@ export const regimenRoutes = new Hono<AppEnv>()
   /** Per-item history and adherence over a window. */
   .get('/history', async (c) => {
     const userId = c.get('userId');
-    const to = todayFrom(c);
+    const to = await todayFrom(c);
     const from = c.req.query('from') ?? addDays(to, -27);
 
     const items = await loadAllItems(userId);
@@ -301,7 +301,7 @@ export const regimenRoutes = new Hono<AppEnv>()
 
   .get('/events', async (c) => {
     const userId = c.get('userId');
-    const to = todayFrom(c);
+    const to = await todayFrom(c);
     const from = c.req.query('from') ?? '1970-01-01';
     const rows = await db
       .select()

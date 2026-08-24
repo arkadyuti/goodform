@@ -228,7 +228,7 @@ export const planRoutes = new Hono<AppEnv>()
     // report missed sessions, because the rest of the week has not happened
     // yet — so the client needs to know whether the week is actually over
     // before it repeats any of that back to the runner.
-    const today = todayFrom(c);
+    const today = await todayFrom(c);
     return c.json({
       gate,
       week,

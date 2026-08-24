@@ -13,6 +13,7 @@ import {
   type ReminderRecord,
 } from '@goodform/shared';
 import { db, schema } from './db/index.js';
+import { localParts } from './time.js';
 import { env, pushEnabled } from './env.js';
 import { pushToUser } from './push.js';
 import { loadActiveItems, loadEvents, usersAwaitingReminders } from './regimen-store.js';
@@ -22,36 +23,6 @@ type SettingsRow = typeof schema.settings.$inferSelect;
 const TICK_MS = 60_000;
 /** The guardrail sweep looks at four weeks of data; four times a day is plenty. */
 const GUARDRAIL_MS = 6 * 60 * 60 * 1000;
-
-// ---------------------------------------------------------------------------
-// Local time
-// ---------------------------------------------------------------------------
-
-/**
- * The user's wall clock, resolved through their IANA zone at this instant.
- * Going through Intl rather than a stored offset is what makes a schedule
- * survive travel and DST: 08:00 stays 08:00 on both sides of a clock change.
- */
-export function localParts(instant: Date, timezone: string): { date: string; time: string } {
-  try {
-    const date = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(instant);
-    const time = new Intl.DateTimeFormat('en-GB', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).format(instant);
-    return { date, time };
-  } catch {
-    // An unknown zone should not stop every other user's reminders.
-    return { date: instant.toISOString().slice(0, 10), time: instant.toISOString().slice(11, 16) };
-  }
-}
 
 export function prefsFrom(row: SettingsRow): ReminderPrefs {
   return {

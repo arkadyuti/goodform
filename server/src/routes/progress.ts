@@ -143,7 +143,7 @@ export const progressRoutes = new Hono<AppEnv>()
    */
   .get('/trends', async (c) => {
     const userId = c.get('userId');
-    const to = todayFrom(c);
+    const to = await todayFrom(c);
     const from = c.req.query('from') ?? addDays(to, -180);
 
     const [sessions, checks] = await Promise.all([
@@ -238,7 +238,7 @@ export const progressRoutes = new Hono<AppEnv>()
   .get('/weekly-review', async (c) => {
     const userId = c.get('userId');
     const requested = c.req.query('week');
-    const today = todayFrom(c);
+    const today = await todayFrom(c);
     const from = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? startOfWeek(requested) : startOfWeek(today);
     const to = addDays(from, 6);
     const previousFrom = addDays(from, -7);
@@ -343,7 +343,7 @@ export const progressRoutes = new Hono<AppEnv>()
    */
   .get('/calendar', async (c) => {
     const userId = c.get('userId');
-    const to = c.req.query('to') ?? todayFrom(c);
+    const to = c.req.query('to') ?? await todayFrom(c);
     const from = c.req.query('from') ?? addDays(to, -30);
 
     // Nothing was asked of anyone before their plan existed. Without this the
