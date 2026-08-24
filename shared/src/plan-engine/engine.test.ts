@@ -3,6 +3,7 @@ import type { Baseline, PlanWeek, Profile, WorkoutSession } from '../types.js';
 import { MAX_WEEKLY_GROWTH, generatePlan } from './generate.js';
 import { evaluateWeek, returnFromBreak } from './gating.js';
 import { buildStrengthSessions, substitute } from './strength.js';
+import { daysClear } from '../habits.js';
 import { STRENGTH_EXERCISES } from '../content/strength.js';
 
 const baseProfile: Profile = {
@@ -228,5 +229,26 @@ describe('strength', () => {
         expect(e.contraindicatedFor).not.toContain('achilles');
       }
     }
+  });
+});
+
+describe('daysClear', () => {
+  const log = (date: string, over: Partial<{ cigarettes: number; alcoholUnits: number; beers: number }> = {}) => ({
+    date,
+    cigarettes: 0,
+    alcoholUnits: 0,
+    beers: 0,
+    ...over,
+  });
+
+  it('counts consecutive clear days back from the most recent log', () => {
+    expect(daysClear([log('2026-08-24'), log('2026-08-23'), log('2026-08-22', { cigarettes: 3 })], 'cigarettes')).toBe(2);
+  });
+
+  it('treats a beer as breaking an alcohol-free run', () => {
+    const logs = [log('2026-08-24'), log('2026-08-23', { beers: 1 }), log('2026-08-22')];
+    expect(daysClear(logs, ['alcoholUnits', 'beers'])).toBe(1);
+    // Counting units alone would have missed it entirely.
+    expect(daysClear(logs, 'alcoholUnits')).toBe(3);
   });
 });

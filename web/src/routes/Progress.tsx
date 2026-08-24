@@ -12,6 +12,7 @@ export function Progress() {
   const { adherence, longestRunSec, discomfort, checks } = data;
   const logs = rangeData?.logs ?? [];
   const cigarettes = logs.reduce((sum, l) => sum + l.cigarettes, 0);
+  const beers = logs.reduce((sum, l) => sum + l.beers, 0);
   const alcohol = logs.reduce((sum, l) => sum + l.alcoholUnits, 0);
 
   return (
@@ -52,7 +53,7 @@ export function Progress() {
         </div>
       </Card>
 
-      {(cigarettes > 0 || alcohol > 0 || logs.length > 0) && (
+      {(cigarettes > 0 || alcohol > 0 || beers > 0 || logs.length > 0) && (
         <Card>
           <Eyebrow>Last 4 weeks</Eyebrow>
           <div className="mt-2 grid grid-cols-3 gap-4">
@@ -64,13 +65,15 @@ export function Progress() {
             </div>
             <div>
               <p className="tabular text-3xl leading-none" style={{ fontWeight: 800 }}>
-                {Math.round(alcohol)}
+                {beers}
               </p>
-              <p className="mt-1 text-[0.8125rem] text-ink-soft">alcohol units</p>
+              <p className="mt-1 text-[0.8125rem] text-ink-soft">
+                beers{alcohol > 0 ? ` + ${Math.round(alcohol)} units` : ''}
+              </p>
             </div>
             <div>
               <p className="tabular text-3xl leading-none" style={{ fontWeight: 800 }}>
-                {logs.filter((l) => l.cigarettes === 0 && l.alcoholUnits === 0).length}
+                {logs.filter((l) => l.cigarettes === 0 && l.alcoholUnits === 0 && l.beers === 0).length}
               </p>
               <p className="mt-1 text-[0.8125rem] text-ink-soft">clear days</p>
             </div>

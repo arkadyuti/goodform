@@ -45,7 +45,7 @@ export function Today() {
   const protein = profile ? proteinTarget(profile.weightKg) : null;
   const proteinTotal = nutritionData?.proteinTotal ?? 0;
 
-  const tracked = settings?.trackedHabits ?? ['water', 'sleep', 'alcohol', 'cigarettes'];
+  const tracked = settings?.trackedHabits ?? ['water', 'sleep', 'beer', 'alcohol', 'cigarettes'];
 
   // Today is rendered as one piece once its data has settled. Letting cards
   // arrive one by one pushes the screen around under whoever is reading it.
@@ -186,9 +186,19 @@ export function Today() {
               onChange={(cigarettes) => saveLog.mutate({ ...log, cigarettes })}
             />
           )}
+          {tracked.includes('beer') && (
+            <Stepper
+              label="Beer"
+              value={log.beers}
+              unit={log.beers === 1 ? 'drink' : 'drinks'}
+              tone="watch"
+              max={50}
+              onChange={(beers) => saveLog.mutate({ ...log, beers })}
+            />
+          )}
           {tracked.includes('alcohol') && (
             <Stepper
-              label="Alcohol"
+              label="Other alcohol"
               value={log.alcoholUnits}
               unit="units"
               tone="watch"
@@ -315,7 +325,7 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
         )}
         {gate.overridable && (
           <Button variant="secondary" onClick={() => (showRisk ? decide.mutate({ action: 'advance', override: true }) : setShowRisk(true))}>
-            {showRisk ? 'Yes, move on anyway' : 'Move on anyway'}
+            {showRisk ? 'Yes, move to next week' : 'Move to next week anyway'}
           </Button>
         )}
       </div>
@@ -333,13 +343,13 @@ function QuitSupport({
   logs,
   settings,
 }: {
-  logs: { date: string; cigarettes: number; alcoholUnits: number }[];
+  logs: { date: string; cigarettes: number; alcoholUnits: number; beers: number }[];
   settings: { smokingBaselinePerDay: number | null; cigaretteCost: number | null; currency: string } | null | undefined;
 }) {
   const stats = useMemo(() => {
     if (!logs.length) return null;
     const smokeFree = daysClear(logs, 'cigarettes');
-    const drinkFree = daysClear(logs, 'alcoholUnits');
+    const drinkFree = daysClear(logs, ['alcoholUnits', 'beers']);
     const smoked = logs.reduce((sum, l) => sum + l.cigarettes, 0);
     const baseline = settings?.smokingBaselinePerDay ?? 0;
     const cost = settings?.cigaretteCost ?? 0;

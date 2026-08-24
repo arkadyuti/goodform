@@ -1,0 +1,2 @@
+ALTER TABLE "settings" ALTER COLUMN "tracked_habits" SET DEFAULT '["water","sleep","alcohol","beer","cigarettes"]'::jsonb;--> statement-breakpoint
+ALTER TABLE "daily_logs" ADD COLUMN "beers" integer DEFAULT 0 NOT NULL;

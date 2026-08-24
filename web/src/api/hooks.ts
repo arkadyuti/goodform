@@ -55,6 +55,7 @@ export interface DailyLogRow {
   waterMl: number;
   sleepHours: number | null;
   alcoholUnits: number;
+  beers: number;
   cigarettes: number;
   customHabits: Record<string, number>;
   supplements: Record<string, boolean>;
@@ -318,6 +319,7 @@ export function emptyLog(date: string): DailyLogRow {
     waterMl: 0,
     sleepHours: null,
     alcoholUnits: 0,
+    beers: 0,
     cigarettes: 0,
     customHabits: {},
     supplements: {},

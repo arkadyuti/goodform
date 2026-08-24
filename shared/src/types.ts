@@ -189,6 +189,8 @@ export interface DailyLog {
   waterMl: number;
   sleepHours: number | null;
   alcoholUnits: number;
+  /** Beers as drinks — counting units is a conversion nobody does honestly. */
+  beers: number;
   cigarettes: number;
   customHabits: Record<string, number>;
   notes: string | null;

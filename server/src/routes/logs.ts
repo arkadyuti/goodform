@@ -8,6 +8,7 @@ const dailyLogSchema = z.object({
   waterMl: z.number().int().min(0).max(10_000).optional(),
   sleepHours: z.number().min(0).max(24).nullish(),
   alcoholUnits: z.number().min(0).max(50).optional(),
+  beers: z.number().int().min(0).max(50).optional(),
   cigarettes: z.number().int().min(0).max(100).optional(),
   customHabits: z.record(z.number()).optional(),
   supplements: z.record(z.boolean()).optional(),

@@ -115,7 +115,7 @@ export const settings = pgTable('settings', {
   trackedHabits: jsonb('tracked_habits')
     .$type<string[]>()
     .notNull()
-    .default(['water', 'sleep', 'alcohol', 'cigarettes']),
+    .default(['water', 'sleep', 'alcohol', 'beer', 'cigarettes']),
   customHabits: jsonb('custom_habits').$type<{ key: string; label: string; unit: string }[]>().notNull().default([]),
   /** For the quit-support cards: typical daily count and unit cost before starting. */
   smokingBaselinePerDay: real('smoking_baseline_per_day'),
@@ -228,6 +228,8 @@ export const dailyLogs = pgTable(
     waterMl: integer('water_ml').notNull().default(0),
     sleepHours: real('sleep_hours'),
     alcoholUnits: real('alcohol_units').notNull().default(0),
+    /** Beers counted as drinks, so nobody has to convert to units in their head. */
+    beers: integer('beers').notNull().default(0),
     cigarettes: integer('cigarettes').notNull().default(0),
     customHabits: jsonb('custom_habits').$type<Record<string, number>>().notNull().default({}),
     supplements: jsonb('supplements').$type<Record<string, boolean>>().notNull().default({}),

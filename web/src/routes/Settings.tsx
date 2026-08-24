@@ -10,7 +10,8 @@ import { Button, Card, Choices, Eyebrow, Field, Note, TextInput } from '../compo
 const HABITS = [
   { key: 'water', label: 'Water' },
   { key: 'cigarettes', label: 'Cigarettes' },
-  { key: 'alcohol', label: 'Alcohol' },
+  { key: 'beer', label: 'Beer' },
+  { key: 'alcohol', label: 'Other alcohol' },
   { key: 'sleep', label: 'Sleep' },
 ];
 
