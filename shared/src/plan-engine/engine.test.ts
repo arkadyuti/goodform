@@ -96,6 +96,15 @@ describe('generatePlan', () => {
     expect(careful.conservatismReasons.length).toBeGreaterThan(0);
   });
 
+  it('does not tell a runner what their baseline run showed when they never ran', () => {
+    const plan = generatePlan(baseProfile, { minutesRun: 0, stopReason: 'legs', recordedAt: '2026-08-24' }, '2026-08-24');
+    expect(plan.conservatism).toBeGreaterThanOrEqual(2);
+    expect(plan.conservatismReasons.join(' ')).not.toContain('baseline run ended');
+    expect(plan.conservatismReasons.join(' ')).toContain('no running at all');
+    // The gentlest the plan goes: one minute at a time.
+    expect(plan.weeks[0]!.runSec).toBe(60);
+  });
+
   it('stacks every conservatism modifier (FR-2.3)', () => {
     const plan = generatePlan(
       {

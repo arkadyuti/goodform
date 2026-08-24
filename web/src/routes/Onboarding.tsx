@@ -10,6 +10,7 @@ import {
 } from '../api/hooks.ts';
 import { Button, Choices, Eyebrow, Field, Note, TextInput } from '../components/ui.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
+import { BaselineRun, StopReasonChoice } from '../components/BaselineRun.tsx';
 
 const SCREENING_QUESTIONS: { flag: ScreeningFlag; question: string }[] = [
   { flag: 'heart_condition', question: 'Has a doctor ever said you have a heart condition, or that you should only do physical activity supervised by a doctor?' },
@@ -43,6 +44,8 @@ export function Onboarding() {
   const [acknowledged, setAcknowledged] = useState(false);
   const [minutesRun, setMinutesRun] = useState('');
   const [stopReason, setStopReason] = useState<StopReason | null>(null);
+  /** How the runner chose to give us their starting point. */
+  const [baselineMode, setBaselineMode] = useState<'guided' | 'manual' | 'none' | null>(null);
   const [plan, setPlan] = useState<{ weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[]; reasons: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,10 +68,12 @@ export function Onboarding() {
     go('baseline');
   };
 
-  const finishBaseline = async () => {
-    if (!stopReason) return;
+  const finishBaseline = async (minutes?: number, reason?: StopReason) => {
+    const finalMinutes = minutes ?? Number(minutesRun);
+    const finalReason = reason ?? stopReason;
+    if (finalReason === null || Number.isNaN(finalMinutes)) return;
     try {
-      await saveBaseline.mutateAsync({ minutesRun: Number(minutesRun), stopReason });
+      await saveBaseline.mutateAsync({ minutesRun: finalMinutes, stopReason: finalReason });
       const result = (await generatePlan.mutateAsync()) as {
         plan: { conservatismReasons: string[] };
         weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[];
@@ -356,43 +361,114 @@ export function Onboarding() {
         </Section>
       )}
 
-      {step === 'baseline' && (
+      {step === 'baseline' && baselineMode === 'guided' && (
+        <BaselineRun
+          onCancel={() => setBaselineMode(null)}
+          onDone={({ minutesRun: measured, stopReason: reason }) => {
+            setMinutesRun(String(measured));
+            setStopReason(reason);
+            void finishBaseline(measured, reason);
+          }}
+        />
+      )}
+
+      {step === 'baseline' && baselineMode !== 'guided' && (
         <Section
-          title="Your baseline"
-          blurb="Your plan starts from what you can do now, so we need one honest measurement — not a target."
+          title="How long can you run right now?"
+          blurb="There's no right answer here and nothing to live up to. We just need your starting point, so your first weeks ask for something you can actually do."
         >
-          <Note>
-            <strong className="block text-ink">Go and do this before you fill it in.</strong>
-            Walk briskly for 5 minutes. Then run at an easy, conversational pace until you want to stop. Do not
-            push. The number matters far less than why you stopped.
-          </Note>
-          <Field label="Minutes you ran" hint="Whole or half minutes are fine. Zero is a real answer.">
-            <TextInput
-              type="number"
-              inputMode="decimal"
-              min={0}
-              max={120}
-              value={minutesRun}
-              onChange={(e) => setMinutesRun(e.target.value)}
-            />
-          </Field>
-          <Field label="Why did you stop?" hint="This is the single most important answer in your whole setup.">
-            <Choices
-              value={stopReason ? [stopReason] : []}
-              onChange={([v]) => v && setStopReason(v as StopReason)}
-              options={[
-                { value: 'breath', label: 'I was out of breath', hint: 'Your lungs were the limit' },
-                { value: 'legs', label: 'My legs were struggling', hint: 'Your tissue was the limit — the plan will build slower' },
-                { value: 'choice', label: 'I chose to stop', hint: 'Neither was at its limit' },
-              ]}
-            />
-          </Field>
-          {error && <Note tone="alert">{error}</Note>}
-          <Next
-            disabled={minutesRun === '' || !stopReason || saveBaseline.isPending || generatePlan.isPending}
-            onClick={finishBaseline}
-            label={generatePlan.isPending ? 'Building your plan' : 'Build my plan'}
-          />
+          {!baselineMode && (
+            <>
+              <Choices
+                value={[]}
+                onChange={([v]) => v && setBaselineMode(v)}
+                options={[
+                  {
+                    value: 'guided' as const,
+                    label: 'Time it now — I\u2019ll guide you',
+                    hint: 'About 10 minutes outside: 5 walking, then run until you want to stop.',
+                  },
+                  {
+                    value: 'manual' as const,
+                    label: 'I already know roughly',
+                    hint: 'Type in a number instead.',
+                  },
+                  {
+                    value: 'none' as const,
+                    label: 'I\u2019ve never run, or I can\u2019t yet',
+                    hint: 'Completely normal. We\u2019ll start you at the gentlest setting.',
+                  },
+                ]}
+              />
+              <p className="text-[0.8125rem] leading-relaxed text-ink-faint">
+                You can change this later. Guessing low is safe — if the first weeks turn out easy, the plan
+                moves you up quickly.
+              </p>
+            </>
+          )}
+
+          {baselineMode === 'manual' && (
+            <>
+              <Field
+                label="Minutes you can run without stopping"
+                hint="A rough guess is fine. Most people starting out are somewhere between 1 and 10 minutes."
+              >
+                <TextInput
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={120}
+                  placeholder="e.g. 3"
+                  value={minutesRun}
+                  onChange={(e) => setMinutesRun(e.target.value)}
+                />
+              </Field>
+
+              <div>
+                <Eyebrow>What makes you stop?</Eyebrow>
+                <p className="mt-0.5 mb-1.5 text-[0.8125rem] text-ink-soft">
+                  This changes your plan more than the number does.
+                </p>
+                <StopReasonChoice value={stopReason} onPick={setStopReason} />
+              </div>
+
+              {stopReason === 'legs' && (
+                <Note tone="run">
+                  Legs first means we build slower. Lungs recover in weeks; tendons and bone take months, and
+                  they set the pace.
+                </Note>
+              )}
+
+              {error && <Note tone="alert">{error}</Note>}
+              <Next
+                disabled={minutesRun === '' || !stopReason || saveBaseline.isPending || generatePlan.isPending}
+                onClick={() => finishBaseline()}
+                label={generatePlan.isPending ? 'Building your plan' : 'Build my plan'}
+              />
+              <Button variant="quiet" full className="py-3" onClick={() => setBaselineMode(null)}>
+                Back
+              </Button>
+            </>
+          )}
+
+          {baselineMode === 'none' && (
+            <>
+              <Note>
+                <strong className="block text-ink">We'll start from walking.</strong>
+                Your first sessions are one minute of very slow running at a time, with a longer walk in
+                between each one. If that turns out to be easy, the plan moves up on its own.
+              </Note>
+              {error && <Note tone="alert">{error}</Note>}
+              <Next
+                disabled={saveBaseline.isPending || generatePlan.isPending}
+                onClick={() => finishBaseline(0, 'legs')}
+                label={generatePlan.isPending ? 'Building your plan' : 'Build my plan'}
+              />
+              <Button variant="quiet" full className="py-3" onClick={() => setBaselineMode(null)}>
+                Back
+              </Button>
+            </>
+          )}
         </Section>
       )}
 

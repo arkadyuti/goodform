@@ -21,9 +21,13 @@ export function assessConservatism(profile: Profile, baseline: Baseline): Conser
   const reasons: string[] = [];
   let score = 0;
 
-  if (baseline.stopReason === 'legs') {
+  if (baseline.minutesRun === 0) {
+    // Nobody who has not run yet should be told what their baseline run showed.
     score += 2;
-    reasons.push('Your baseline run ended on your legs, not your breath — tissue needs the slower ramp.');
+    reasons.push('You are starting from no running at all, so the plan begins as gently as it can.');
+  } else if (baseline.stopReason === 'legs') {
+    score += 2;
+    reasons.push('Your run ended on your legs, not your breath — tissue needs the slower ramp.');
   }
   if (profile.smokingStatus === 'current' || profile.smokingStatus === 'quitting') {
     score += 1;
