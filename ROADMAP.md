@@ -6,23 +6,23 @@ Feature checklist. ✅ built · 🔨 in progress · ⬜ remaining
 
 - ✅ Monorepo scaffold (Vite PWA · Hono API · Drizzle · Postgres)
 - ✅ Auth: Google login + dev email/password fallback
-- ⬜ Onboarding: profile capture (FR-1.2)
-- ⬜ Pre-exercise screening PAR-Q (FR-1.3, SR-1)
-- ⬜ Baseline assessment session (FR-1.4)
+- ✅ Onboarding: profile capture (FR-1.2)
+- ✅ Pre-exercise screening PAR-Q (FR-1.3, SR-1)
+- ✅ Baseline assessment session (FR-1.4)
 - ✅ Plan engine: run-walk block generation, ≤10%/week, conservatism modifiers (FR-2.x)
 - ✅ Adaptive gating: advance / repeat / pause on discomfort (FR-3.2), user override (FR-3.3)
 - ✅ Deload week (FR-3.4) + return-from-break step-back (FR-3.5)
-- ⬜ Session player: warm-up → interval timer → cool-down (FR-4.x)
-- ⬜ Wall-clock timer, wake lock, audio cues, stop-rules card
-- ⬜ Post-session log: completion, effort, discomfort (FR-3.1)
-- ⬜ Strength programme: equipment tiers, tempo, priority, substitutions (FR-5.x)
-- ⬜ Daily habit log: water, sleep, alcohol, cigarettes, custom habits (FR-7.1)
-- ⬜ Quit support: days-since-last + weekly trend + money saved (smoking/alcohol)
-- ⬜ Nutrition: protein target, food library (Indian + Western), one-tap logging (FR-6.1–6.3)
-- ⬜ Weekly check-in: weight, waist, resting HR, capability (FR-7.2)
-- ⬜ Today dashboard: session card + all daily logging in one screen
-- ⬜ Progress: adherence view + basic trends (FR-8.1)
-- ⬜ PWA: installable, offline session delivery, offline log queue + sync (NFR-2, FR-4.6)
+- ✅ Session player: warm-up → interval timer → cool-down (FR-4.x)
+- ✅ Wall-clock timer, wake lock, audio cues, stop-rules card
+- ✅ Post-session log: completion, effort, discomfort (FR-3.1)
+- ✅ Strength programme: equipment tiers, tempo, priority, substitutions (FR-5.x)
+- ✅ Daily habit log: water, sleep, alcohol, cigarettes, custom habits (FR-7.1)
+- ✅ Quit support: days-since-last + weekly trend + money saved (smoking/alcohol)
+- ✅ Nutrition: protein target, food library (Indian + Western), one-tap logging (FR-6.1–6.3)
+- ✅ Weekly check-in: weight, waist, resting HR, capability (FR-7.2)
+- ✅ Today dashboard: session card + all daily logging in one screen
+- ✅ Progress: adherence view + basic trends (FR-8.1)
+- ✅ PWA: installable, offline session delivery, offline log queue + sync (NFR-2, FR-4.6)
 
 ## P2 — Insight
 

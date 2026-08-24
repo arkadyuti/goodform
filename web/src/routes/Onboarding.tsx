@@ -1,0 +1,479 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import type { Profile, ScreeningFlag, StopReason } from '@goodform/shared';
+import { proteinTarget } from '@goodform/shared';
+import {
+  useGeneratePlan,
+  useSaveBaseline,
+  useSaveProfile,
+  useSaveScreening,
+} from '../api/hooks.ts';
+import { Button, Choices, Eyebrow, Field, Note, TextInput } from '../components/ui.tsx';
+import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
+
+const SCREENING_QUESTIONS: { flag: ScreeningFlag; question: string }[] = [
+  { flag: 'heart_condition', question: 'Has a doctor ever said you have a heart condition, or that you should only do physical activity supervised by a doctor?' },
+  { flag: 'chest_pain', question: 'Do you get chest pain at rest, during daily activity, or when you exert yourself?' },
+  { flag: 'dizziness', question: 'Do you lose balance from dizziness, or have you lost consciousness in the last 12 months?' },
+  { flag: 'bone_or_joint_problem', question: 'Do you have a bone or joint problem that could be made worse by running?' },
+  { flag: 'bp_or_heart_medication', question: 'Are you currently prescribed medication for blood pressure or a heart condition?' },
+  { flag: 'pregnancy', question: 'Are you pregnant, or have you given birth in the last six months?' },
+  { flag: 'other_reason', question: 'Do you know of any other reason why you should not do physical activity?' },
+];
+
+type Step = 'about' | 'body' | 'habits' | 'history' | 'goal' | 'screening' | 'baseline' | 'reveal';
+const ORDER: Step[] = ['about', 'body', 'habits', 'history', 'goal', 'screening', 'baseline', 'reveal'];
+
+export function Onboarding() {
+  const navigate = useNavigate();
+  const saveProfile = useSaveProfile();
+  const saveScreening = useSaveScreening();
+  const saveBaseline = useSaveBaseline();
+  const generatePlan = useGeneratePlan();
+
+  const [step, setStep] = useState<Step>('about');
+  const [draft, setDraft] = useState<Partial<Profile>>({
+    units: 'metric',
+    exclusions: [],
+    injuryHistory: [],
+    equipment: ['none'],
+    alcoholFrequency: 'never',
+  });
+  const [flags, setFlags] = useState<ScreeningFlag[]>([]);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [minutesRun, setMinutesRun] = useState('');
+  const [stopReason, setStopReason] = useState<StopReason | null>(null);
+  const [plan, setPlan] = useState<{ weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[]; reasons: string[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const stepIndex = ORDER.indexOf(step);
+  const set = <K extends keyof Profile>(key: K, value: Profile[K]) => setDraft((d) => ({ ...d, [key]: value }));
+  const go = (next: Step) => {
+    setError(null);
+    setStep(next);
+    window.scrollTo({ top: 0 });
+  };
+
+  const finishProfile = async () => {
+    const complete = draft as Profile;
+    await saveProfile.mutateAsync(complete);
+    go('screening');
+  };
+
+  const finishScreening = async () => {
+    await saveScreening.mutateAsync({ flags, acknowledged });
+    go('baseline');
+  };
+
+  const finishBaseline = async () => {
+    if (!stopReason) return;
+    try {
+      await saveBaseline.mutateAsync({ minutesRun: Number(minutesRun), stopReason });
+      const result = (await generatePlan.mutateAsync()) as {
+        plan: { conservatismReasons: string[] };
+        weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[];
+      };
+      setPlan({ weeks: result.weeks, reasons: result.plan.conservatismReasons });
+      go('reveal');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not build your plan.');
+    }
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-lg px-1 py-6">
+      {step !== 'reveal' && (
+        <div className="mb-7">
+          <div className="mb-4 flex items-center justify-between">
+            <span className="flex h-3.5 w-9 overflow-hidden rounded-full" aria-hidden>
+              <span className="h-full flex-[3] bg-run" />
+              <span className="h-full flex-[1] bg-walk" />
+            </span>
+            {stepIndex > 0 && (
+              <button
+                onClick={() => go(ORDER[stepIndex - 1]!)}
+                className="tap px-2 text-[0.875rem] text-ink-faint hover:text-ink"
+              >
+                Back
+              </button>
+            )}
+          </div>
+          <div className="mb-3 flex gap-1" aria-hidden>
+            {ORDER.slice(0, -1).map((s, i) => (
+              <span key={s} className={`h-1 flex-1 rounded-full ${i <= stepIndex ? 'bg-ink' : 'bg-line'}`} />
+            ))}
+          </div>
+          <Eyebrow>
+            Step {stepIndex + 1} of {ORDER.length - 1}
+          </Eyebrow>
+        </div>
+      )}
+
+      {step === 'about' && (
+        <Section
+          title="Let's start with the basics"
+          blurb="These shape how conservatively your plan begins. Nothing here is shared with anyone."
+        >
+          <Field label="Age">
+            <TextInput
+              type="number"
+              inputMode="numeric"
+              min={13}
+              max={100}
+              value={draft.age ?? ''}
+              onChange={(e) => set('age', Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Sex at birth" hint="Used for protein and iron guidance only.">
+            <Choices
+              columns={2}
+              value={draft.sexAtBirth ?? []}
+              onChange={([v]) => v && set('sexAtBirth', v)}
+              options={[
+                { value: 'male', label: 'Male' },
+                { value: 'female', label: 'Female' },
+                { value: 'intersex', label: 'Intersex' },
+              ]}
+            />
+          </Field>
+          <Next
+            disabled={!draft.age || !draft.sexAtBirth}
+            onClick={() => go('body')}
+          />
+        </Section>
+      )}
+
+      {step === 'body' && (
+        <Section title="Height and weight" blurb="Weight sets your daily protein target. It is context, never a target we set for you.">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Height (cm)">
+              <TextInput
+                type="number"
+                inputMode="decimal"
+                value={draft.heightCm ?? ''}
+                onChange={(e) => set('heightCm', Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Weight (kg)">
+              <TextInput
+                type="number"
+                inputMode="decimal"
+                value={draft.weightKg ?? ''}
+                onChange={(e) => set('weightKg', Number(e.target.value))}
+              />
+            </Field>
+          </div>
+          {draft.weightKg ? (
+            <Note tone="run">
+              Your protein target will be about {proteinTarget(draft.weightKg).targetG} g a day. That is the one
+              nutrition number GoodForm tracks — no calorie counting.
+            </Note>
+          ) : null}
+          <Field label="What do you eat?">
+            <Choices
+              value={draft.dietaryPattern ?? []}
+              onChange={([v]) => v && set('dietaryPattern', v)}
+              options={[
+                { value: 'omnivore', label: 'Everything' },
+                { value: 'no_red_meat', label: 'No red meat' },
+                { value: 'pescatarian', label: 'Fish, no other meat' },
+                { value: 'eggetarian', label: 'Vegetarian plus eggs' },
+                { value: 'vegetarian', label: 'Vegetarian' },
+                { value: 'vegan', label: 'Vegan' },
+              ]}
+            />
+          </Field>
+          <Next disabled={!draft.heightCm || !draft.weightKg || !draft.dietaryPattern} onClick={() => go('habits')} />
+        </Section>
+      )}
+
+      {step === 'habits' && (
+        <Section
+          title="Where you're starting from"
+          blurb="Answer honestly — this changes the plan, and a plan built on a flattering answer is the one that injures you."
+        >
+          <Field label="Current activity">
+            <Choices
+              value={draft.activityLevel ?? []}
+              onChange={([v]) => v && set('activityLevel', v)}
+              options={[
+                { value: 'none', label: 'Nothing regular' },
+                { value: 'occasional_sport', label: 'Sport now and then' },
+                { value: 'regular_sport', label: 'Regular sport' },
+                { value: 'other_cardio', label: 'Other cardio — cycling, swimming' },
+              ]}
+            />
+          </Field>
+          <Field label="Smoking">
+            <Choices
+              columns={2}
+              value={draft.smokingStatus ?? []}
+              onChange={([v]) => v && set('smokingStatus', v)}
+              options={[
+                { value: 'never', label: 'Never' },
+                { value: 'current', label: 'Currently smoke' },
+                { value: 'quitting', label: 'Quitting now' },
+                { value: 'former', label: 'Gave up' },
+              ]}
+            />
+          </Field>
+          <Field label="Alcohol">
+            <Choices
+              columns={2}
+              value={draft.alcoholFrequency ?? []}
+              onChange={([v]) => v && set('alcoholFrequency', v)}
+              options={[
+                { value: 'never', label: 'Never' },
+                { value: 'occasional', label: 'Occasionally' },
+                { value: 'weekly', label: 'Most weeks' },
+                { value: 'more', label: 'More than that' },
+              ]}
+            />
+          </Field>
+          <Next disabled={!draft.activityLevel || !draft.smokingStatus} onClick={() => go('history')} />
+        </Section>
+      )}
+
+      {step === 'history' && (
+        <Section
+          title="Injuries and equipment"
+          blurb="Past injuries change which strength work you get and how fast the running builds."
+        >
+          <Field label="Have any of these given you trouble?" hint="Select all that apply.">
+            <Choices
+              multiple
+              columns={2}
+              value={draft.injuryHistory ?? []}
+              onChange={(v) => set('injuryHistory', v)}
+              options={[
+                { value: 'knee', label: 'Knee' },
+                { value: 'shin', label: 'Shin' },
+                { value: 'ankle', label: 'Ankle' },
+                { value: 'achilles', label: 'Achilles' },
+                { value: 'hip', label: 'Hip' },
+                { value: 'foot', label: 'Foot' },
+                { value: 'back', label: 'Back' },
+              ]}
+            />
+          </Field>
+          <Field label="What do you have at home?" hint="Strength work is built from what you actually own.">
+            <Choices
+              multiple
+              columns={2}
+              value={draft.equipment ?? []}
+              onChange={(v) => set('equipment', v.length ? v : ['none'])}
+              options={[
+                { value: 'none', label: 'Nothing' },
+                { value: 'pull_up_bar', label: 'Pull-up bar' },
+                { value: 'resistance_bands', label: 'Bands' },
+                { value: 'dumbbells', label: 'Dumbbells' },
+                { value: 'step', label: 'Step or stairs' },
+              ]}
+            />
+          </Field>
+          <Next onClick={() => go('goal')} />
+        </Section>
+      )}
+
+      {step === 'goal' && (
+        <Section title="What are you after?" blurb="This sets the length and shape of your first block.">
+          <Choices
+            value={draft.goal ?? []}
+            onChange={([v]) => v && set('goal', v)}
+            options={[
+              { value: 'first_continuous_run', label: 'Run without stopping', hint: 'The first real milestone for most beginners' },
+              { value: 'five_k', label: 'Get to 5K' },
+              { value: 'ten_k', label: 'Get to 10K' },
+              { value: 'general_fitness', label: 'General fitness', hint: 'Running as the means, not the end' },
+              { value: 'return_after_break', label: 'Come back after a break' },
+            ]}
+          />
+          <Next disabled={!draft.goal || saveProfile.isPending} onClick={finishProfile} label="Save and continue" />
+        </Section>
+      )}
+
+      {step === 'screening' && (
+        <Section
+          title="Before you run"
+          blurb="Seven standard questions. They exist because a plan is the wrong answer for some people, and we would rather find that out now."
+        >
+          <div className="flex flex-col gap-2">
+            {SCREENING_QUESTIONS.map((q) => {
+              const active = flags.includes(q.flag);
+              return (
+                <button
+                  key={q.flag}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() =>
+                    setFlags(active ? flags.filter((f) => f !== q.flag) : [...flags, q.flag])
+                  }
+                  className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
+                    active ? 'border-alert bg-alert-wash' : 'border-line bg-paper hover:border-ink-faint'
+                  }`}
+                >
+                  <span
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 ${
+                      active ? 'border-alert bg-alert text-white' : 'border-line'
+                    }`}
+                    aria-hidden
+                  >
+                    {active && '✓'}
+                  </span>
+                  <span className="text-[0.9375rem] leading-snug">{q.question}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[0.8125rem] text-ink-faint">Tap any that are true for you. Leave them all untapped if none are.</p>
+
+          {flags.length > 0 && (
+            <>
+              <Note tone="alert">
+                <strong className="block">Speak to a doctor before you start.</strong>
+                Based on what you've told us, a generated plan is not the right starting point. A short
+                conversation with a GP or physiotherapist first is genuinely worth it — GoodForm cannot assess
+                you and will not pretend otherwise.
+              </Note>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-paper p-3.5">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(e) => setAcknowledged(e.target.checked)}
+                  className="mt-1 h-5 w-5 accent-[#b5462c]"
+                />
+                <span className="text-[0.9375rem] leading-snug">
+                  I understand, and I take responsibility for deciding to continue.
+                </span>
+              </label>
+            </>
+          )}
+
+          <Next
+            disabled={(flags.length > 0 && !acknowledged) || saveScreening.isPending}
+            onClick={finishScreening}
+          />
+        </Section>
+      )}
+
+      {step === 'baseline' && (
+        <Section
+          title="Your baseline"
+          blurb="Your plan starts from what you can do now, so we need one honest measurement — not a target."
+        >
+          <Note>
+            <strong className="block text-ink">Go and do this before you fill it in.</strong>
+            Walk briskly for 5 minutes. Then run at an easy, conversational pace until you want to stop. Do not
+            push. The number matters far less than why you stopped.
+          </Note>
+          <Field label="Minutes you ran" hint="Whole or half minutes are fine. Zero is a real answer.">
+            <TextInput
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={120}
+              value={minutesRun}
+              onChange={(e) => setMinutesRun(e.target.value)}
+            />
+          </Field>
+          <Field label="Why did you stop?" hint="This is the single most important answer in your whole setup.">
+            <Choices
+              value={stopReason ? [stopReason] : []}
+              onChange={([v]) => v && setStopReason(v as StopReason)}
+              options={[
+                { value: 'breath', label: 'I was out of breath', hint: 'Your lungs were the limit' },
+                { value: 'legs', label: 'My legs were struggling', hint: 'Your tissue was the limit — the plan will build slower' },
+                { value: 'choice', label: 'I chose to stop', hint: 'Neither was at its limit' },
+              ]}
+            />
+          </Field>
+          {error && <Note tone="alert">{error}</Note>}
+          <Next
+            disabled={minutesRun === '' || !stopReason || saveBaseline.isPending || generatePlan.isPending}
+            onClick={finishBaseline}
+            label={generatePlan.isPending ? 'Building your plan' : 'Build my plan'}
+          />
+        </Section>
+      )}
+
+      {step === 'reveal' && plan && (
+        <div className="py-2">
+          <Eyebrow>Your first block</Eyebrow>
+          <h1 className="mt-2 text-4xl" style={{ fontWeight: 800 }}>
+            {plan.weeks.length} weeks, three runs a week
+          </h1>
+          <p className="mt-3 leading-relaxed text-ink-soft">
+            Here is the whole thing, start to finish. Each bar shows one session to scale — cobalt is running,
+            amber is walking. Nothing is hidden and nothing gets sprung on you.
+          </p>
+
+          {plan.reasons.length > 0 && (
+            <div className="mt-6 rounded-xl border border-line bg-paper p-4">
+              <Eyebrow>Why your plan starts where it does</Eyebrow>
+              <ul className="mt-2.5 flex flex-col gap-2">
+                {plan.reasons.map((reason) => (
+                  <li key={reason} className="flex gap-2.5 text-[0.9375rem] leading-snug text-ink-soft">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-walk" />
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <ol className="mt-6 flex flex-col gap-3.5">
+            {plan.weeks.map((week) => (
+              <li key={week.index} className="flex items-center gap-3.5">
+                <span className="tabular w-7 shrink-0 text-right text-sm text-ink-faint">{week.index}</span>
+                <div className="min-w-0 flex-1">
+                  <IntervalRibbon
+                    runSec={week.runSec}
+                    walkSec={week.walkSec}
+                    reps={week.reps}
+                    height={14}
+                    scaleToSec={Math.max(...plan.weeks.map((w) => (w.runSec + w.walkSec) * w.reps), 1)}
+                  />
+                  <p className="mt-1 text-[0.8125rem] text-ink-faint">
+                    {week.runSec / 60} min run · {week.walkSec / 60} min walk · × {week.reps}
+                    {week.isDeload && <span className="ml-1.5 text-walk-deep">· lighter week</span>}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <Note tone="run">
+            Tendons and bone take three to six months to adapt — far longer than your lungs. Weeks where you
+            repeat rather than progress are the plan working, not you failing.
+          </Note>
+
+          <Button full className="mt-6 py-3.5" onClick={() => navigate('/')}>
+            Start
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, blurb, children }: { title: string; blurb: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="text-3xl" style={{ fontWeight: 750 }}>
+          {title}
+        </h1>
+        <p className="mt-2 leading-relaxed text-ink-soft">{blurb}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Next({ onClick, disabled, label = 'Continue' }: { onClick: () => void; disabled?: boolean; label?: string }) {
+  return (
+    <Button full className="mt-1 py-3.5" onClick={onClick} disabled={disabled}>
+      {label}
+    </Button>
+  );
+}

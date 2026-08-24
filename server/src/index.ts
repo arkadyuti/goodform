@@ -2,7 +2,10 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { auth } from './auth.js';
 import { env, googleEnabled } from './env.js';
 import { logRoutes, nutritionRoutes } from './routes/logs.js';
@@ -36,13 +39,34 @@ app.route('/api/logs', logRoutes);
 app.route('/api/nutrition', nutritionRoutes);
 app.route('/api/progress', progressRoutes);
 
+/**
+ * Locates the built SPA by walking up from this module, so the server runs the
+ * same whether it is started from the repo root, from server/, or from dist/.
+ */
+function findWebDist(): string | null {
+  if (process.env.WEB_DIST) return resolve(process.env.WEB_DIST);
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(dir, 'web', 'dist');
+    if (existsSync(join(candidate, 'index.html'))) return candidate;
+    dir = dirname(dir);
+  }
+  return null;
+}
+
 // In production the same process serves the built SPA.
 if (env.isProd) {
-  app.use('/*', serveStatic({ root: './web/dist' }));
-  app.get('*', async (c) => {
-    const html = await readFile('./web/dist/index.html', 'utf8');
-    return c.html(html);
-  });
+  const webDist = findWebDist();
+  if (!webDist) {
+    console.warn('No built web app found. Run `pnpm build` before starting in production.');
+  } else {
+    // serveStatic resolves `root` against the working directory.
+    const root = relative(process.cwd(), webDist) || '.';
+    const indexHtml = join(webDist, 'index.html');
+    app.use('/*', serveStatic({ root }));
+    // Client-side routes fall back to the shell.
+    app.get('*', async (c) => c.html(await readFile(indexHtml, 'utf8')));
+  }
 }
 
 serve({ fetch: app.fetch, port: env.port }, (info) => {

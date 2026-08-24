@@ -50,3 +50,19 @@ serves both API and static files from one process — put Caddy in front for TLS
 ## Roadmap
 
 See [ROADMAP.md](./ROADMAP.md) for what is built and what remains.
+
+## Design notes
+
+The palette is functional, not decorative: **cobalt is running, amber is
+walking**, and the whole session screen carries the phase colour so a glance at
+arm's length in daylight tells you what to do before you have read anything.
+Blue against yellow stays distinguishable in bright sun and for the most common
+colour vision deficiencies.
+
+The **interval ribbon** draws a session to scale — run blocks against walks —
+and runs through the whole app: on today's card, as the in-session progress
+bar, and down the plan where every week shares one time scale, so you can watch
+the run blocks stretch as the repetitions fall away.
+
+Verified: Lighthouse 100 for accessibility, best practices and SEO; installable
+and fully usable offline, with logs queued in IndexedDB and synced on reconnect.

@@ -1,0 +1,131 @@
+@import 'tailwindcss';
+
+/*
+  GoodForm's palette comes from the pavement, not the gym: chalk-marked
+  concrete, cobalt for the run phase, amber for the walk. Blue against yellow
+  stays distinguishable in bright sun and for the most common colour vision
+  deficiencies — the timer must be readable at arm's length outdoors.
+*/
+@theme {
+  --color-chalk: #f1f3ee;
+  --color-chalk-deep: #e4e8df;
+  --color-paper: #fbfcfa;
+  --color-ink: #14201b;
+  --color-ink-soft: #4a5a52;
+  --color-ink-faint: #5f6d65;
+  --color-line: #cfd6cb;
+
+  --color-run: #1b3fd8;
+  --color-run-deep: #142ea1;
+  --color-run-wash: #dfe4fb;
+  --color-walk: #d9880f;
+  --color-walk-deep: #8a5508;
+  --color-walk-wash: #fbeed6;
+  --color-alert: #a03c24;
+  --color-alert-wash: #f7e2dc;
+  --color-good: #2f6b4f;
+
+  --font-display: 'Archivo', 'Archivo Fallback', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Public Sans', 'Public Sans Fallback', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 14px;
+}
+
+@font-face {
+  font-family: 'Archivo Fallback';
+  src: local('Arial'), local('Liberation Sans'), local('Helvetica'), local('DejaVu Sans');
+  size-adjust: 96%;
+  ascent-override: 92%;
+  descent-override: 24%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Public Sans Fallback';
+  src: local('Arial'), local('Liberation Sans'), local('Helvetica'), local('DejaVu Sans');
+  size-adjust: 102%;
+  ascent-override: 92%;
+  descent-override: 24%;
+  line-gap-override: 0%;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    background: var(--color-chalk);
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-chalk);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  h1, h2, h3, .display {
+    font-family: var(--font-display);
+    font-variation-settings: 'wdth' 112;
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+  }
+
+  /* Timer and log figures must never shift width as they count. */
+  .tabular {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
+    font-variation-settings: 'wdth' 118;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-run);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-run);
+    color: var(--color-chalk);
+  }
+}
+
+@layer components {
+  /* Track-side signage: the small labels that organise every screen. */
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-variation-settings: 'wdth' 100;
+    color: var(--color-ink-faint);
+  }
+
+  .card {
+    background: var(--color-paper);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  /* Every tappable thing clears 44px, one-handed (NFR-4). */
+  .tap {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
