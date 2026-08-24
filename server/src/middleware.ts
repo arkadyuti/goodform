@@ -74,7 +74,21 @@ export async function dateRangeFrom(
   }
   const span = daysBetween(from, to);
   if (span < 0) throw new HTTPException(400, { message: 'The range ends before it starts' });
-  if (span > maxDays) throw new HTTPException(400, { message: `Ranges are limited to ${maxDays} days` });
+  if (span > maxDays)
+    throw new HTTPException(400, { message: `Ranges are limited to ${maxDays} days` });
 
   return { from, to };
+}
+
+/**
+ * A bounded `limit` off the query string.
+ *
+ * `Number(c.req.query('limit') ?? 200)` turned `?limit=abc` into `NaN`, which
+ * Postgres rejects, and `?limit=99999999` into an unbounded row fetch on a
+ * process with a 192MB heap. Neither is something a caller should be able to
+ * ask for by accident.
+ */
+export function limitFrom(c: Context, fallback: number, max: number): number {
+  const value = Number(c.req.query('limit'));
+  return Number.isInteger(value) && value > 0 ? Math.min(value, max) : fallback;
 }

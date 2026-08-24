@@ -239,7 +239,14 @@ export function Note({
     run: 'bg-run-wash text-run-deep',
   };
   return (
-    <p className={`rounded-xl px-3.5 py-3 text-[0.875rem] leading-relaxed ${tones[tone]}`}>
+    <p
+      // An alert-toned note is how the app reports a wrong password, a refused
+      // save, a paused plan. As a plain paragraph a screen reader said nothing
+      // at all when one appeared, so the message existed only for people who
+      // could see it.
+      role={tone === 'alert' ? 'alert' : undefined}
+      className={`rounded-xl px-3.5 py-3 text-[0.875rem] leading-relaxed ${tones[tone]}`}
+    >
       {children}
     </p>
   );

@@ -44,7 +44,7 @@ downloadable as JSON or CSV whenever you want it.
 ## Stack
 
 - **web/** — React 19 + Vite + TypeScript + Tailwind v4, installable PWA (vite-plugin-pwa)
-- **server/** — Hono on Node 20, Better Auth, Drizzle ORM
+- **server/** — Hono on Node 22, Better Auth, Drizzle ORM
 - **shared/** — types, plan engine (pure TS, unit-tested), seed content
 - **Postgres 16** — per-user data
 
@@ -99,19 +99,30 @@ a prompt that would do nothing.
 ### Tests
 
 ```bash
-pnpm -r test                # plan engine, timer, selection logic
+pnpm -r test                # plan engine, reminders, regimen, timer, CSV export
+pnpm lint
+pnpm -r typecheck
 ```
 
 The plan engine tests pin the progression rules and every gating decision; the
-timer tests simulate a suspended tab to prove the session does not drift.
+timer tests simulate a suspended tab to prove the session does not drift, and
+that it keeps ticking with no animation frames at all — the phone-in-a-pocket
+case. CI runs all three before it will deploy.
 
 ### Dev login
 
 With `DEV_LOGIN=true`, the login page shows an email/password form with sign-up
 allowed, so the app is usable before Google OAuth exists.
 
-**Set `DEV_LOGIN=false` before this is reachable from anywhere but your own
-machine** — it lets anyone who can reach the server create an account.
+**`DEV_LOGIN` must be false in production.** The server refuses to start
+otherwise, and because the deploy gates a release on `/api/health`, a build
+configured that way rolls back rather than serving. The same check rejects a
+development `BETTER_AUTH_SECRET`, a non-https `APP_URL`, and a non-https entry
+in `DEV_ORIGINS`.
+
+The risk it closes: with sign-up open, whoever knows an allowlisted address can
+register it first and set a password. Because Google is a trusted linking
+provider, the real owner's Google sign-in then attaches to *that* account.
 
 ### Google login
 
@@ -139,10 +150,30 @@ belong to nobody. Hard-refresh afterwards to clear the stale session cookie.
 
 ## Production
 
-`pnpm build` produces `web/dist` (static) and the server bundle. The server
-serves both the API and the built app from one process, locating `web/dist` by
-walking up from its own directory, so it runs the same from the repo root or
-from `dist/`. Put Caddy in front for TLS.
+`pnpm build` typechecks everything and bundles the server with esbuild into
+three standalone files — `dist/index.js`, `dist/migrate.js`, `dist/seed.js` —
+alongside `web/dist`. Bundling is not an optimisation: the server imports
+`@goodform/shared`, whose entry point is TypeScript source, so `tsc` output
+alone leaves a bare specifier that Node resolves to a `.ts` file and refuses to
+load.
+
+**`NODE_ENV=production` is required.** Serving the built app is gated on it, so
+without it the API answers and every page 404s.
+
+One process serves the API and the SPA. It finds `web/dist` by walking up from
+its own directory; set `WEB_DIST` to say so outright. Put Caddy in front for
+TLS.
+
+GoodForm is deployed by GitHub Actions on every push to `main` —
+[deploy/README.md](./deploy/README.md) covers the release layout, the health
+gate, the rollback, and the four secrets CI needs.
+
+### Who may sign up
+
+`SIGNUP_ALLOWLIST` is a comma-separated list of addresses allowed to *create* an
+account. It gates Google and email/password alike, because the question is who
+may hold an account here, not which button they arrived through. Empty means
+anyone can — right on a laptop, wrong on a public URL.
 
 ## Your data
 
@@ -159,6 +190,10 @@ on reconnect. Habit logs carry the whole day rather than a patch, so two edits
 made offline cannot overwrite each other. React Query is set to
 `networkMode: 'always'` on purpose — its own offline pausing would hold writes
 in memory, where a reload loses them.
+
+A queued write is only discarded when the server actually rejects it. A 401 —
+a session that expired while the phone was away — stops the drain and keeps
+everything, because those writes are good and will land after signing in again.
 
 Verified end to end: logged offline, reloaded offline, reconnected, values
 landed in Postgres intact.

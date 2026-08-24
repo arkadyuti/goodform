@@ -36,7 +36,10 @@ app.use(
 // Nothing this app accepts is large — the biggest body is a settings object.
 // Without a cap, one request can make the process allocate until systemd kills
 // it, which on a 512MB box takes very little effort.
-app.use('/api/*', bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: 'Too large' }, 413) }));
+app.use(
+  '/api/*',
+  bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: 'Too large' }, 413) }),
+);
 
 // Which sign-in methods the client should offer.
 app.get('/api/config', (c) => c.json({ google: googleEnabled, devLogin: env.devLogin }));
@@ -121,9 +124,7 @@ app.onError((err, c) => {
 });
 
 app.notFound((c) =>
-  c.req.path.startsWith('/api/')
-    ? c.json({ error: 'Not found' }, 404)
-    : c.text('Not found', 404),
+  c.req.path.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.text('Not found', 404),
 );
 
 let stopScheduler: () => void = () => {};
@@ -165,6 +166,13 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 // and let systemd's health gate catch anything that actually broke.
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled rejection:', reason);
+});
+
+// Synchronous throws from an EventEmitter never reach the handler above. Log
+// and keep serving: the health check decides whether this process is still fit
+// to run, and it can answer that better than a stack trace can.
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
 });
 
 export type AppType = typeof app;

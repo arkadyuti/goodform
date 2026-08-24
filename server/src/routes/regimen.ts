@@ -17,7 +17,7 @@ import {
   type RegimenItem,
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
-import { dateRangeFrom, requireAuth, todayFrom, type AppEnv } from '../middleware.js';
+import { dateRangeFrom, limitFrom, requireAuth, todayFrom, type AppEnv } from '../middleware.js';
 import { adjustSupply, loadActiveItems, loadAllItems, loadEvents, resolveReminder, toEvent, toItem } from '../regimen-store.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -317,7 +317,7 @@ export const regimenRoutes = new Hono<AppEnv>()
         ),
       )
       .orderBy(desc(schema.regimenEvents.dueDate))
-      .limit(Number(c.req.query('limit') ?? 500));
+      .limit(limitFrom(c, 500, 2000));
     return c.json({ events: rows.map(toEvent) });
   });
 

@@ -3,7 +3,7 @@ import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { DISCOMFORT_LOCATIONS } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
-import { dateRangeFrom, requireAuth, type AppEnv } from '../middleware.js';
+import { dateRangeFrom, limitFrom, requireAuth, type AppEnv } from '../middleware.js';
 
 const sessionSchema = z.object({
   /** Client-generated UUID makes an offline replay idempotent. */
@@ -41,7 +41,7 @@ export const sessionRoutes = new Hono<AppEnv>()
       .from(schema.workoutSessions)
       .where(and(...conditions))
       .orderBy(desc(schema.workoutSessions.date))
-      .limit(Number(c.req.query('limit') ?? 200));
+      .limit(limitFrom(c, 200, 1000));
     return c.json({ sessions: rows });
   })
 

@@ -93,6 +93,14 @@ jobs:
           chown -R goodform:goodform "$NEW"
 
           set -a; . "$ROOT/.env"; set +a
+
+          # A rollback moves the symlink back; it cannot un-migrate a schema.
+          # For an additive migration that is fine, and for a destructive one it
+          # is the difference between a five-minute restore and a bad morning.
+          # Cheap insurance at this size — the whole database is a few MB.
+          pg_dump "$DATABASE_URL" | gzip > "$NEW/pre-migration.sql.gz" || \
+            echo "::warning::pre-migration dump failed; continuing"
+
           MIGRATIONS_DIR="$NEW/drizzle" node "$NEW/migrate.js"
           MIGRATIONS_DIR="$NEW/drizzle" node "$NEW/seed.js"
 
@@ -105,9 +113,13 @@ jobs:
           for _ in $(seq 1 30); do
             sleep 2
             if curl -fsS --max-time 4 http://127.0.0.1:8790/api/health | grep -q '"ok":true'; then ok=1; break; fi
+            # A refusal to boot on unsafe configuration is a permanent failure,
+            # not a slow start — stop waiting out the full minute for it.
+            if journalctl -u goodform -n 40 --no-pager | grep -q 'Refusing to start'; then break; fi
           done
           if [ -z "$ok" ]; then
             echo "::error::Health check failed; rolling back"
+            echo "::error::Schema is still migrated. Pre-migration dump: $NEW/pre-migration.sql.gz"
             journalctl -u goodform -n 60 --no-pager || true
             if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
               ln -sfn "$PREVIOUS" "$ROOT/current.new" && mv -Tf "$ROOT/current.new" "$ROOT/current"
