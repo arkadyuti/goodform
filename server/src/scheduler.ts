@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import {
+  addDays,
   assessNutritionRisk,
   daysBetween,
   doseStates,
@@ -47,7 +48,10 @@ export function prefsFrom(row: SettingsRow): ReminderPrefs {
 // One user's tick
 // ---------------------------------------------------------------------------
 
-async function remindersFor(userId: string, timezone: string): Promise<Map<string, ReminderRecord>> {
+async function remindersFor(
+  userId: string,
+  timezone: string,
+): Promise<Map<string, ReminderRecord>> {
   const since = new Date(Date.now() - 3 * 86_400_000);
   const rows = await db
     .select()
@@ -106,7 +110,12 @@ async function tickUser(settingsRow: SettingsRow, now: Date): Promise<void> {
       const logged = await db
         .select({ id: schema.workoutSessions.id })
         .from(schema.workoutSessions)
-        .where(and(eq(schema.workoutSessions.userId, userId), eq(schema.workoutSessions.date, localDate)))
+        .where(
+          and(
+            eq(schema.workoutSessions.userId, userId),
+            eq(schema.workoutSessions.date, localDate),
+          ),
+        )
         .limit(1);
       sessionDue = logged.length === 0;
     }
@@ -154,7 +163,13 @@ async function deliver(userId: string, reminder: DueReminder, now: Date): Promis
   // same nudge every minute at a phone that is switched off.
   await db
     .insert(schema.reminders)
-    .values({ userId, kind: reminder.kind, key: reminder.key, attempts: reminder.attempt, lastSentAt: now })
+    .values({
+      userId,
+      kind: reminder.kind,
+      key: reminder.key,
+      attempts: reminder.attempt,
+      lastSentAt: now,
+    })
     .onConflictDoUpdate({
       target: [schema.reminders.userId, schema.reminders.kind, schema.reminders.key],
       set: { attempts: reminder.attempt, lastSentAt: now, snoozedUntil: null },
@@ -176,18 +191,26 @@ export async function sweepGuardrails(): Promise<void> {
     .from(schema.profiles)
     .innerJoin(schema.settings, eq(schema.settings.userId, schema.profiles.userId));
 
-  const today = new Date().toISOString().slice(0, 10);
-  const since = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
+  const now = new Date();
 
   for (const { profile, settings } of rows) {
     // Already withdrawn, or deliberately restored by the user — leave it be.
     if (settings.targetsWithdrawnAt || settings.targetsRestoredAt) continue;
 
+    // Each user's own day. The server runs on UTC, so a shared date here put
+    // everyone east of Greenwich a day out for part of every evening, and the
+    // window this reads back over is what decides whether the numbers are
+    // withdrawn — a judgement that should not shift with the server's clock.
+    const today = localParts(now, settings.timezone).date;
+    const since = addDays(today, -40);
+
     const [checks, sessions, nutrition] = await Promise.all([
       db
         .select({ date: schema.weeklyChecks.date, weightKg: schema.weeklyChecks.weightKg })
         .from(schema.weeklyChecks)
-        .where(and(eq(schema.weeklyChecks.userId, profile.userId), gte(schema.weeklyChecks.date, since))),
+        .where(
+          and(eq(schema.weeklyChecks.userId, profile.userId), gte(schema.weeklyChecks.date, since)),
+        ),
       db
         .select({ date: schema.workoutSessions.date })
         .from(schema.workoutSessions)
@@ -205,7 +228,12 @@ export async function sweepGuardrails(): Promise<void> {
         })
         .from(schema.nutritionEntries)
         .innerJoin(schema.foodItems, eq(schema.foodItems.id, schema.nutritionEntries.foodItemId))
-        .where(and(eq(schema.nutritionEntries.userId, profile.userId), gte(schema.nutritionEntries.date, since)))
+        .where(
+          and(
+            eq(schema.nutritionEntries.userId, profile.userId),
+            gte(schema.nutritionEntries.date, since),
+          ),
+        )
         .groupBy(schema.nutritionEntries.date),
     ]);
 

@@ -80,8 +80,9 @@ export function SettingsView() {
           </label>
         ) : (
           <p className="border-b border-line py-3 text-[0.875rem] leading-snug text-ink-soft">
-            <strong className="text-ink">No vibration on this device.</strong> Every browser on iPhone runs on
-            WebKit, which has no vibration support — so sound and the on-screen colour are your cues.
+            <strong className="text-ink">No vibration on this device.</strong> Every browser on
+            iPhone runs on WebKit, which has no vibration support — so sound and the on-screen
+            colour are your cues.
           </p>
         )}
 
@@ -105,8 +106,8 @@ export function SettingsView() {
           />
           {!audioSessionSupported() && (
             <p className="mt-2 text-[0.8125rem] leading-snug text-ink-faint">
-              This browser does not expose the audio session, so the choice may have no effect here. It matters
-              on iOS Safari 16.4 and later.
+              This browser does not expose the audio session, so the choice may have no effect here.
+              It matters on iOS Safari 16.4 and later.
             </p>
           )}
         </div>
@@ -121,8 +122,8 @@ export function SettingsView() {
       <Card>
         <Eyebrow>What you track</Eyebrow>
         <p className="mt-1.5 text-[0.875rem] leading-snug text-ink-soft">
-          Turn off anything you do not want to see. Tracking nothing but sessions is a perfectly good way to use
-          this.
+          Turn off anything you do not want to see. Tracking nothing but sessions is a perfectly
+          good way to use this.
         </p>
         <div className="mt-3">
           <Choices
@@ -137,11 +138,16 @@ export function SettingsView() {
         {settings.customHabits.length > 0 && (
           <ul className="mt-3 flex flex-col gap-1.5">
             {settings.customHabits.map((habit) => (
-              <li key={habit.key} className="flex items-center justify-between gap-3 text-[0.9375rem]">
+              <li
+                key={habit.key}
+                className="flex items-center justify-between gap-3 text-[0.9375rem]"
+              >
                 {habit.label}
                 <button
                   onClick={() =>
-                    save.mutate({ customHabits: settings.customHabits.filter((h) => h.key !== habit.key) })
+                    save.mutate({
+                      customHabits: settings.customHabits.filter((h) => h.key !== habit.key),
+                    })
                   }
                   className="tap px-2 text-ink-faint hover:text-alert"
                   aria-label={`Remove ${habit.label}`}
@@ -166,7 +172,11 @@ export function SettingsView() {
               save.mutate({
                 customHabits: [
                   ...settings.customHabits,
-                  { key: habitLabel.toLowerCase().replace(/\W+/g, '-'), label: habitLabel.trim(), unit: '' },
+                  {
+                    key: habitLabel.toLowerCase().replace(/\W+/g, '-'),
+                    label: habitLabel.trim(),
+                    unit: '',
+                  },
                 ],
               });
               setHabitLabel('');
@@ -181,8 +191,8 @@ export function SettingsView() {
         <Card>
           <Eyebrow>Quit support</Eyebrow>
           <p className="mt-1.5 text-[0.875rem] leading-snug text-ink-soft">
-            Tell GoodForm what a normal day looked like before, and Today will show what you have not smoked and
-            what that is worth.
+            Tell GoodForm what a normal day looked like before, and Today will show what you have
+            not smoked and what that is worth.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2.5">
             <Field label="Cigarettes a day">
@@ -222,7 +232,10 @@ export function SettingsView() {
       <Card>
         <Eyebrow>Around a session</Eyebrow>
         <div className="mt-2">
-          <Field label="When you usually train" hint="Drives the fuelling notes, and the nudge an hour before.">
+          <Field
+            label="When you usually train"
+            hint="Drives the fuelling notes, and the nudge an hour before."
+          >
             <TextInput
               type="time"
               value={settings.sessionTime}
@@ -251,7 +264,8 @@ export function SettingsView() {
       <Card>
         <Eyebrow>Your profile</Eyebrow>
         <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
-          Changing your weight recalculates protein. Changing your equipment reselects your strength work.
+          Changing your weight recalculates protein. Changing your equipment reselects your strength
+          work.
         </p>
         <Button variant="secondary" className="mt-3" onClick={() => navigate('/onboarding')}>
           Edit profile
@@ -261,8 +275,9 @@ export function SettingsView() {
       <ExportCard />
 
       <Note>
-        Your health data stays on your own server and is never sold or shared. GoodForm gives general fitness
-        guidance — it is not medical advice and does not replace a doctor or physiotherapist.
+        Your health data stays on your own server and is never sold or shared. GoodForm gives
+        general fitness guidance — it is not medical advice and does not replace a doctor or
+        physiotherapist.
       </Note>
 
       <Button
@@ -316,7 +331,18 @@ function RemindersCard({ settings }: { settings: Settings }) {
   // inside quiet hours without the runner ever choosing that. Quiet hours win
   // — but silently losing a reminder is worse than the conflict itself.
   const sessionNudge = timeFromMinutes(minutesOfDay(settings.sessionTime) - 60);
-  const nudgeIsSilenced = withinWindow(sessionNudge, settings.quietHoursStart, settings.quietHoursEnd);
+  const nudgeIsSilenced = withinWindow(
+    sessionNudge,
+    settings.quietHoursStart,
+    settings.quietHoursEnd,
+  );
+  // The weekly check-in time is chosen outright rather than derived, but it is
+  // dropped by quiet hours in exactly the same way and said so nowhere.
+  const checkIsSilenced = withinWindow(
+    settings.weeklyCheckTime,
+    settings.quietHoursStart,
+    settings.quietHoursEnd,
+  );
 
   const enable = async () => {
     setBusy(true);
@@ -354,8 +380,8 @@ function RemindersCard({ settings }: { settings: Settings }) {
     <Card>
       <Eyebrow>Reminders</Eyebrow>
       <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
-        Everything due already shows on Today, with no permission needed. Notifications add a nudge at the time
-        itself — useful, and never something the app relies on.
+        Everything due already shows on Today, with no permission needed. Notifications add a nudge
+        at the time itself — useful, and never something the app relies on.
       </p>
 
       {support.state === 'needs_install' && (
@@ -381,8 +407,8 @@ function RemindersCard({ settings }: { settings: Settings }) {
         <>
           {!hasItems && !settings.remindersEnabled && (
             <p className="mt-3 rounded-xl bg-chalk-deep px-3.5 py-3 text-[0.875rem] leading-relaxed text-ink-soft">
-              You can turn these on now, but they are most useful once there is something on your list. Sessions
-              and the weekly check-in are covered either way.
+              You can turn these on now, but they are most useful once there is something on your
+              list. Sessions and the weekly check-in are covered either way.
             </p>
           )}
 
@@ -434,8 +460,8 @@ function RemindersCard({ settings }: { settings: Settings }) {
               />
               {settings.sessionReminders && nudgeIsSilenced && (
                 <p className="border-b border-line py-3 text-[0.875rem] leading-relaxed text-walk-deep">
-                  That {sessionNudge} nudge falls inside your quiet hours, so it will not arrive. Train later, or
-                  move quiet hours to end before {sessionNudge}.
+                  That {sessionNudge} nudge falls inside your quiet hours, so it will not arrive.
+                  Train later, or move quiet hours to end before {sessionNudge}.
                 </p>
               )}
               <Toggle
@@ -474,6 +500,15 @@ function RemindersCard({ settings }: { settings: Settings }) {
                         onChange={(e) => save.mutate({ weeklyCheckTime: e.target.value })}
                       />
                     </Field>
+                    {checkIsSilenced && (
+                      <div className="mt-2">
+                        <Note tone="alert">
+                          {settings.weeklyCheckTime} falls inside your quiet hours, so this reminder
+                          will not arrive. Pick a time outside {settings.quietHoursStart}–
+                          {settings.quietHoursEnd}, or move quiet hours below.
+                        </Note>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -481,7 +516,8 @@ function RemindersCard({ settings }: { settings: Settings }) {
               <div className="border-b border-line py-3">
                 <span className="eyebrow">Quiet hours</span>
                 <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-soft">
-                  Nothing arrives in this window — except a medicine you deliberately scheduled inside it.
+                  Nothing arrives in this window — except a medicine you deliberately scheduled
+                  inside it.
                 </p>
                 <div className="mt-2 grid grid-cols-2 gap-2.5">
                   <Field label="From">
@@ -515,8 +551,8 @@ function RemindersCard({ settings }: { settings: Settings }) {
               />
 
               <p className="pt-3 text-[0.8125rem] leading-relaxed text-ink-faint">
-                Times are read in {settings.timezone}. They stay put across time zones and clock changes — 08:00
-                is 08:00 wherever you are.
+                Times are read in {settings.timezone}. They stay put across time zones and clock
+                changes — 08:00 is 08:00 wherever you are.
               </p>
             </div>
           )}
@@ -571,8 +607,9 @@ function RestoreTargetsCard() {
     <Card className="border-walk">
       <Eyebrow className="!text-walk-deep">Your targets</Eyebrow>
       <p className="mt-1.5 leading-relaxed text-ink-soft">
-        GoodForm put your protein target and weight figures away because of the pattern in the last few weeks.
-        You can have them back — it is your call, and asking twice would just be an app arguing with you.
+        GoodForm put your protein target and weight figures away because of the pattern in the last
+        few weeks. You can have them back — it is your call, and asking twice would just be an app
+        arguing with you.
       </p>
       {confirming ? (
         <div className="mt-3 flex gap-2.5">
@@ -611,8 +648,9 @@ function DeleteAccountCard({ email }: { email: string }) {
     <Card className="border-alert bg-alert-wash">
       <Eyebrow className="!text-alert">Delete everything</Eyebrow>
       <p className="mt-1.5 leading-relaxed">
-        This removes your profile, plans, every session, every log, your list and the foods you added. It happens
-        immediately and cannot be undone. Download your data first if you want to keep it.
+        This removes your profile, plans, every session, every log, your list and the foods you
+        added. It happens immediately and cannot be undone. Download your data first if you want to
+        keep it.
       </p>
       <div className="mt-3">
         <Field label="Type your email address to confirm" hint={email}>

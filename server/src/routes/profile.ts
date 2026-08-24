@@ -59,7 +59,21 @@ const settingsSchema = z.object({
   currency: z.string().max(8).optional(),
 
   // Reminders (P3, P3.1)
-  timezone: z.string().max(64).optional(),
+  // Rejected rather than stored blindly: an unrecognised zone makes every
+  // wall-clock calculation quietly fall back to UTC, so reminders arrive at
+  // the wrong hour with nothing anywhere saying why.
+  timezone: z
+    .string()
+    .max(64)
+    .refine((zone) => {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: zone });
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'Unknown time zone')
+    .optional(),
   remindersEnabled: z.boolean().optional(),
   regimenReminders: z.boolean().optional(),
   sessionReminders: z.boolean().optional(),
@@ -79,16 +93,30 @@ export const profileRoutes = new Hono<AppEnv>()
 
   .get('/', async (c) => {
     const userId = c.get('userId');
-    const [profile] = await db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId));
-    const [screening] = await db.select().from(schema.screenings).where(eq(schema.screenings.userId, userId));
-    const [userSettings] = await db.select().from(schema.settings).where(eq(schema.settings.userId, userId));
-    return c.json({ profile: profile ?? null, screening: screening ?? null, settings: userSettings ?? null });
+    const [profile] = await db
+      .select()
+      .from(schema.profiles)
+      .where(eq(schema.profiles.userId, userId));
+    const [screening] = await db
+      .select()
+      .from(schema.screenings)
+      .where(eq(schema.screenings.userId, userId));
+    const [userSettings] = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.userId, userId));
+    return c.json({
+      profile: profile ?? null,
+      screening: screening ?? null,
+      settings: userSettings ?? null,
+    });
   })
 
   .put('/', async (c) => {
     const userId = c.get('userId');
     const parsed = profileSchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: 'Invalid profile', issues: parsed.error.issues }, 400);
+    if (!parsed.success)
+      return c.json({ error: 'Invalid profile', issues: parsed.error.issues }, 400);
 
     const values = { ...parsed.data, userId, updatedAt: new Date() };
     await db
@@ -105,7 +133,8 @@ export const profileRoutes = new Hono<AppEnv>()
   .put('/settings', async (c) => {
     const userId = c.get('userId');
     const parsed = settingsSchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: 'Invalid settings', issues: parsed.error.issues }, 400);
+    if (!parsed.success)
+      return c.json({ error: 'Invalid settings', issues: parsed.error.issues }, 400);
 
     const values = { ...parsed.data, userId, updatedAt: new Date() };
     await db
@@ -123,7 +152,12 @@ export const profileRoutes = new Hono<AppEnv>()
   .post('/restore-targets', async (c) => {
     await db
       .update(schema.settings)
-      .set({ targetsWithdrawnAt: null, targetsRestoredAt: new Date(), guardrailSignals: [], updatedAt: new Date() })
+      .set({
+        targetsWithdrawnAt: null,
+        targetsRestoredAt: new Date(),
+        guardrailSignals: [],
+        updatedAt: new Date(),
+      })
       .where(eq(schema.settings.userId, c.get('userId')));
     return c.json({ ok: true });
   })
@@ -146,5 +180,8 @@ export const profileRoutes = new Hono<AppEnv>()
       .values(values)
       .onConflictDoUpdate({ target: schema.screenings.userId, set: values });
 
-    return c.json({ ok: true, needsAcknowledgement: parsed.data.flags.length > 0 && !parsed.data.acknowledged });
+    return c.json({
+      ok: true,
+      needsAcknowledgement: parsed.data.flags.length > 0 && !parsed.data.acknowledged,
+    });
   });
