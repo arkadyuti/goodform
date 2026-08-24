@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cell } from './account.js';
+import { cell } from './csv.js';
 
 describe('CSV cell escaping', () => {
   it('neutralises formulas so an exported name cannot run in a spreadsheet', () => {
