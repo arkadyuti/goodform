@@ -57,6 +57,10 @@ pnpm db:seed                # food library
 pnpm dev                    # web on :5173 (proxies /api), server on :8790
 ```
 
+**Open http://localhost:5173.** That is the app. Port 8790 is the API only
+during development and serves no UI — it serves the built app as well, on that
+single port, in production.
+
 `pnpm db:migrate` again after any pull that touches `server/src/db/schema.ts`.
 To change the schema, edit it and run `pnpm db:generate` to write a migration.
 
@@ -80,9 +84,14 @@ machine** — it lets anyone who can reach the server create an account.
 ### Google login
 
 1. Create an OAuth client at https://console.cloud.google.com/apis/credentials
-2. Authorized redirect URI: `http://localhost:8790/api/auth/callback/google`
+2. Authorized redirect URI: `http://localhost:5173/api/auth/callback/google`
    (plus your production URL later)
 3. Put the client ID and secret in `.env`
+
+`APP_URL` must match the origin you browse, because Better Auth builds its
+OAuth redirect from it. In development that is `http://localhost:5173` — point
+it at 8790 and Google will return you to a port that serves no UI. In
+production both are the same origin, so it stops mattering.
 
 The login page shows whichever methods are configured, so the Google button
 appears on its own once the keys are set.
