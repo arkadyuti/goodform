@@ -2,35 +2,59 @@
 
 Feature checklist. ✅ built · 🔨 in progress · ⬜ remaining
 
-## P1 — Core loop + habits (current)
+## P1 — Core loop + habits (shipped)
+
+**Setup**
 
 - ✅ Monorepo scaffold (Vite PWA · Hono API · Drizzle · Postgres)
 - ✅ Auth: Google login + dev email/password fallback
-- ✅ Onboarding: profile capture (FR-1.2)
-- ✅ Pre-exercise screening PAR-Q (FR-1.3, SR-1)
-- ✅ Baseline assessment session (FR-1.4)
-- ✅ Plan engine: run-walk block generation, ≤10%/week, conservatism modifiers (FR-2.x)
-- ✅ Adaptive gating: advance / repeat / pause on discomfort (FR-3.2), user override (FR-3.3)
-- ✅ Deload week (FR-3.4) + return-from-break step-back (FR-3.5)
-- ✅ Session player: warm-up → interval timer → cool-down (FR-4.x)
-- ✅ Wall-clock timer, wake lock, audio cues, stop-rules card
-- ✅ Post-session log: completion, effort, discomfort (FR-3.1)
-- ✅ Strength programme: equipment tiers, tempo, priority, substitutions (FR-5.x)
-- ✅ Daily habit log: water, sleep, alcohol, cigarettes, custom habits (FR-7.1)
-- ✅ Quit support: days-since-last + weekly trend + money saved (smoking/alcohol)
+- ✅ Onboarding: profile capture across seven steps
+- ✅ Pre-exercise screening, with a medical referral on any positive answer
+- ✅ Answers persist per user — a reload or a closed tab resumes where you left
+- ✅ Steps are navigable: any finished step is reachable, edits save on the way
+- ✅ Editing an existing profile saves and closes without regenerating the plan
+- ✅ Starting point, three ways in: guided timed run, manual entry, or
+      never-run-before (no numbers asked)
+
+**Plan**
+
+- ✅ Plan engine: run-walk block generation, ≤10% weekly growth, conservatism modifiers
+- ✅ Adaptive gating: advance / repeat / step back / pause on discomfort
+- ✅ User override on any gate, with the risk stated once
+- ✅ Deload week after four weeks of building, return-from-break step-back
+- ✅ Whole block visible from day one, ribbons on one shared time scale
+
+**Sessions**
+
+- ✅ Session player: warm-up → interval timer → cool-down
+- ✅ Wall-clock timer surviving tab suspension, wake lock, audio cues
+- ✅ Stop-rules card reachable at any point in a session
+- ✅ Cool-down: walk first, then stretches in any order
+- ✅ Post-session log: completion, effort, discomfort location and severity
+- ✅ Strength programme: equipment tiers, tempo, priority marking, injury substitutions
+
+**Daily tracking**
+
+- ✅ Daily habit log: water, sleep, beer, other alcohol, cigarettes, custom habits
+- ✅ Quit support: days clear, four-week totals, money not spent
 - ✅ Nutrition: protein target, food library (Indian + Western), one-tap logging
 - ✅ Dietary pattern guidance (iron, B12, omega-3 notes) on the food screen
-- ✅ Weekly check-in: weight, waist, resting HR, capability (FR-7.2)
-- ✅ Today dashboard: session card + all daily logging in one screen
-- ✅ Progress: adherence view + basic trends (FR-8.1)
-- ✅ PWA: installable, offline session delivery, offline log queue + sync (NFR-2, FR-4.6)
+- ✅ Weekly check-in: weight, waist, resting HR
+- ✅ Today dashboard: session card plus every daily log in one screen
+- ✅ Progress: adherence, longest run, discomfort history, four-week habit totals
+
+**Platform**
+
+- ✅ PWA: installable, offline session delivery, offline write queue synced on reconnect
+- ✅ Offline and syncing states shown rather than left to guesswork
+- ✅ Lighthouse 100 for accessibility, best practices and SEO
 
 ## P2 — Insight
 
-- ⬜ Trend charts: longest run, resting HR, waist, strength capability (FR-8.2)
-- ⬜ Discomfort history chart (FR-8.3)
-- ⬜ Session history detail view (FR-8.4)
-- ⬜ CSV + JSON export (FR-8.5)
+- ⬜ Trend charts: longest run, resting HR, waist, strength capability
+- ⬜ Discomfort history chart
+- ⬜ Session history detail view
+- ⬜ CSV + JSON export
 - ⬜ Weekly review summary
 
 ## P3 — Lifecycle
@@ -101,7 +125,7 @@ item id → taken, so a day's ticks have somewhere to live without a migration.
 - ⬜ Gym module: equipment-based strength programming
 - ⬜ Swimming module
 - ⬜ Sports / play session logging
-- ⬜ Regional food libraries beyond IN + Western (NFR-18)
-- ⬜ i18n / string externalisation (NFR-19)
-- ⬜ Watch companion for interval cues (v2.1)
-- ⬜ Health platform import: heart rate, distance (v2.1)
+- ⬜ Regional food libraries beyond IN + Western
+- ⬜ i18n / string externalisation
+- ⬜ Watch companion for interval cues
+- ⬜ Health platform import: heart rate, distance
