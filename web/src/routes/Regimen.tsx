@@ -14,6 +14,7 @@ import {
   type ItemKind,
   type RegimenItem,
   type ScheduleKind,
+  withinWindow,
 } from '@goodform/shared';
 import {
   useArchiveRegimenItem,
@@ -21,6 +22,7 @@ import {
   useRegimenHistory,
   useRegimenItems,
   useRestoreRegimenItem,
+  useProfile,
   useSaveRegimenItem,
   type RegimenItemInput,
 } from '../api/hooks.ts';
@@ -44,12 +46,7 @@ export function Regimen() {
   const supplements = live.filter((i) => i.kind === 'supplement');
 
   if (editing) {
-    return (
-      <ItemForm
-        item={editing === 'new' ? null : editing}
-        onDone={() => setEditing(null)}
-      />
-    );
+    return <ItemForm item={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />;
   }
 
   return (
@@ -60,8 +57,8 @@ export function Regimen() {
           What you take
         </h1>
         <p className="mt-2 leading-relaxed text-ink-soft">
-          Medicines and supplements are not the same thing here. A missed shake is nothing; a missed course is
-          not, and GoodForm treats the two differently.
+          Medicines and supplements are not the same thing here. A missed shake is nothing; a missed
+          course is not, and GoodForm treats the two differently.
         </p>
       </header>
 
@@ -69,28 +66,41 @@ export function Regimen() {
         Add something
       </Button>
 
-      {isPending && <div className="min-h-[40dvh]" aria-busy="true" aria-label="Loading your list" />}
+      {isPending && (
+        <div className="min-h-[40dvh]" aria-busy="true" aria-label="Loading your list" />
+      )}
 
       {!isPending && live.length === 0 && (
         <Card>
           <Eyebrow>Nothing here yet</Eyebrow>
           <p className="mt-2 leading-snug">
-            Add a tablet, a scoop or a course, and it will appear on Today grouped by when you take it.
+            Add a tablet, a scoop or a course, and it will appear on Today grouped by when you take
+            it.
           </p>
         </Card>
       )}
 
       {medicines.length > 0 && (
-        <Group title="Medicines" items={medicines} history={history?.items ?? []} onEdit={setEditing} />
+        <Group
+          title="Medicines"
+          items={medicines}
+          history={history?.items ?? []}
+          onEdit={setEditing}
+        />
       )}
       {supplements.length > 0 && (
-        <Group title="Supplements" items={supplements} history={history?.items ?? []} onEdit={setEditing} />
+        <Group
+          title="Supplements"
+          items={supplements}
+          history={history?.items ?? []}
+          onEdit={setEditing}
+        />
       )}
 
       <Note>
-        GoodForm does not check for drug interactions, and never suggests starting, stopping or changing a
-        medicine. It surfaces a handful of absorption notes and reminds you of a routine you already have. Your
-        doctor and your pharmacist are the people for everything else.
+        GoodForm does not check for drug interactions, and never suggests starting, stopping or
+        changing a medicine. It surfaces a handful of absorption notes and reminds you of a routine
+        you already have. Your doctor and your pharmacist are the people for everything else.
       </Note>
 
       <div>
@@ -109,7 +119,10 @@ export function Regimen() {
         )}
       </div>
 
-      <Link to="/progress" className="text-center text-[0.875rem] text-run underline underline-offset-4">
+      <Link
+        to="/progress"
+        className="text-center text-[0.875rem] text-run underline underline-offset-4"
+      >
         See adherence over time
       </Link>
     </div>
@@ -124,7 +137,11 @@ function Group({
 }: {
   title: string;
   items: RegimenItem[];
-  history: { item: RegimenItem; adherence: { taken: number; due: number }; days: { date: string; taken: number; skipped: number; missed: number }[] }[];
+  history: {
+    item: RegimenItem;
+    adherence: { taken: number; due: number };
+    days: { date: string; taken: number; skipped: number; missed: number }[];
+  }[];
   onEdit: (item: RegimenItem) => void;
 }) {
   return (
@@ -133,7 +150,11 @@ function Group({
       <ul className="mt-2 flex flex-col gap-2.5">
         {items.map((item) => (
           <li key={item.id}>
-            <ItemRow item={item} history={history.find((h) => h.item.id === item.id)} onEdit={() => onEdit(item)} />
+            <ItemRow
+              item={item}
+              history={history.find((h) => h.item.id === item.id)}
+              onEdit={() => onEdit(item)}
+            />
           </li>
         ))}
       </ul>
@@ -147,7 +168,10 @@ function ItemRow({
   onEdit,
 }: {
   item: RegimenItem;
-  history?: { adherence: { taken: number; due: number }; days: { date: string; taken: number; skipped: number; missed: number }[] };
+  history?: {
+    adherence: { taken: number; due: number };
+    days: { date: string; taken: number; skipped: number; missed: number }[];
+  };
   onEdit: () => void;
 }) {
   const refill = useRefillRegimenItem();
@@ -167,10 +191,15 @@ function ItemRow({
             {item.name}
           </p>
           <p className="mt-0.5 text-[0.8125rem] text-ink-soft">
-            {[dose, scheduleSummary(item), FOOD_RULE_LABELS[item.foodRule]].filter(Boolean).join(' · ')}
+            {[dose, scheduleSummary(item), FOOD_RULE_LABELS[item.foodRule]]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
         </div>
-        <button onClick={onEdit} className="tap shrink-0 rounded-lg px-2 text-[0.875rem] text-run underline underline-offset-4">
+        <button
+          onClick={onEdit}
+          className="tap shrink-0 rounded-lg px-2 text-[0.875rem] text-run underline underline-offset-4"
+        >
           Edit
         </button>
       </div>
@@ -184,8 +213,11 @@ function ItemRow({
       )}
 
       {item.supplyCount !== null && (
-        <p className={`mt-1.5 text-[0.875rem] ${needsRefill(item) ? 'text-alert' : 'text-ink-soft'}`}>
-          {item.supplyCount} left{supplyDays !== null && ` — about ${supplyDays} ${supplyDays === 1 ? 'day' : 'days'}`}
+        <p
+          className={`mt-1.5 text-[0.875rem] ${needsRefill(item) ? 'text-alert' : 'text-ink-soft'}`}
+        >
+          {item.supplyCount} left
+          {supplyDays !== null && ` — about ${supplyDays} ${supplyDays === 1 ? 'day' : 'days'}`}
           {needsRefill(item) && '. Worth reordering now.'}
         </p>
       )}
@@ -294,18 +326,29 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
 
   const [name, setName] = useState(item?.name ?? '');
   const [kind, setKind] = useState<ItemKind>(item?.kind ?? 'supplement');
-  const [doseAmount, setDoseAmount] = useState(item?.doseAmount === null || item === null ? '' : String(item.doseAmount));
+  const [doseAmount, setDoseAmount] = useState(
+    item?.doseAmount === null || item === null ? '' : String(item.doseAmount),
+  );
   const [doseForm, setDoseForm] = useState<DoseForm>(item?.doseForm ?? 'tablet');
   const [scheduleKind, setScheduleKind] = useState<ScheduleKind>(item?.scheduleKind ?? 'daily');
   const [weekdays, setWeekdays] = useState<number[]>(item?.weekdays ?? []);
   const [intervalDays, setIntervalDays] = useState(String(item?.intervalDays ?? 2));
   const [times, setTimes] = useState<string[]>(item?.times ?? ['08:00']);
+  // The server silently drops a supplement reminder scheduled inside quiet
+  // hours — correct, but invisible: someone sets a 6:30am vitamin and simply
+  // never hears from the app again about it. Say so where the time is chosen.
+  const { data: profileData } = useProfile();
+  const quietStart = profileData?.settings?.quietHoursStart ?? '22:00';
+  const quietEnd = profileData?.settings?.quietHoursEnd ?? '07:00';
+  const silenced = times.filter((t) => t && withinWindow(t, quietStart, quietEnd));
   const [foodRule, setFoodRule] = useState<FoodRule>(item?.foodRule ?? 'none');
   const [isCourse, setIsCourse] = useState(Boolean(item?.courseEnd));
   const [courseStart, setCourseStart] = useState(item?.courseStart ?? today());
   const [courseEnd, setCourseEnd] = useState(item?.courseEnd ?? shiftDays(today(), 6));
   const [countSupply, setCountSupply] = useState(item?.supplyCount !== null && item !== null);
-  const [supplyCount, setSupplyCount] = useState(item?.supplyCount === null || item === null ? '' : String(item.supplyCount));
+  const [supplyCount, setSupplyCount] = useState(
+    item?.supplyCount === null || item === null ? '' : String(item.supplyCount),
+  );
   const [remindersEnabled, setRemindersEnabled] = useState(item?.remindersEnabled ?? true);
   const [notes, setNotes] = useState(item?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -330,14 +373,34 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
       notes: notes || null,
       archivedAt: null,
     }),
-    [name, kind, doseAmount, doseForm, scheduleKind, weekdays, intervalDays, times, foodRule, isCourse, courseStart, courseEnd, countSupply, supplyCount, remindersEnabled, notes, item],
+    [
+      name,
+      kind,
+      doseAmount,
+      doseForm,
+      scheduleKind,
+      weekdays,
+      intervalDays,
+      times,
+      foodRule,
+      isCourse,
+      courseStart,
+      courseEnd,
+      countSupply,
+      supplyCount,
+      remindersEnabled,
+      notes,
+      item,
+    ],
   );
 
   const submit = async () => {
     setError(null);
     if (!name.trim()) return setError('Give it a name.');
-    if (scheduleKind === 'weekdays' && weekdays.length === 0) return setError('Pick at least one day.');
-    if (scheduleKind !== 'as_needed' && times.length === 0) return setError('Add at least one time of day.');
+    if (scheduleKind === 'weekdays' && weekdays.length === 0)
+      return setError('Pick at least one day.');
+    if (scheduleKind !== 'as_needed' && times.length === 0)
+      return setError('Add at least one time of day.');
 
     const input: RegimenItemInput & { id?: string } = {
       id: item?.id,
@@ -380,7 +443,11 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
       <Card>
         <div className="flex flex-col gap-3.5">
           <Field label="Name">
-            <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Vitamin D, Amoxicillin, creatine" />
+            <TextInput
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Vitamin D, Amoxicillin, creatine"
+            />
           </Field>
 
           <div>
@@ -390,7 +457,11 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
                 value={[kind]}
                 onChange={([v]) => v && setKind(v)}
                 options={[
-                  { value: 'supplement' as const, label: 'Supplement', hint: 'Reminded once, never nagged.' },
+                  {
+                    value: 'supplement' as const,
+                    label: 'Supplement',
+                    hint: 'Reminded once, never nagged.',
+                  },
                   {
                     value: 'medicine' as const,
                     label: 'Medicine',
@@ -431,7 +502,11 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
       <Card>
         <Eyebrow>When</Eyebrow>
         <div className="mt-2.5 flex flex-col gap-3.5">
-          <Choices value={[scheduleKind]} onChange={([v]) => v && setScheduleKind(v)} options={SCHEDULE_OPTIONS} />
+          <Choices
+            value={[scheduleKind]}
+            onChange={([v]) => v && setScheduleKind(v)}
+            options={SCHEDULE_OPTIONS}
+          />
 
           {scheduleKind === 'weekdays' && (
             <div>
@@ -447,11 +522,15 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
                       aria-label={DAY_NAMES[index]}
                       onClick={() =>
                         setWeekdays((current) =>
-                          current.includes(index) ? current.filter((d) => d !== index) : [...current, index].sort(),
+                          current.includes(index)
+                            ? current.filter((d) => d !== index)
+                            : [...current, index].sort(),
                         )
                       }
                       className={`tap flex-1 rounded-xl border text-[0.875rem] transition-colors ${
-                        active ? 'border-ink bg-ink text-chalk' : 'border-line bg-paper hover:border-ink-faint'
+                        active
+                          ? 'border-ink bg-ink text-chalk'
+                          : 'border-line bg-paper hover:border-ink-faint'
                       }`}
                     >
                       {letter}
@@ -483,7 +562,9 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
                       type="time"
                       value={time}
                       onChange={(e) =>
-                        setTimes((current) => current.map((t, i) => (i === index ? e.target.value : t)))
+                        setTimes((current) =>
+                          current.map((t, i) => (i === index ? e.target.value : t)),
+                        )
                       }
                     />
                     {times.length > 1 && (
@@ -500,9 +581,26 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
                 ))}
               </ul>
               {times.length < 6 && (
-                <Button variant="quiet" className="mt-1.5 px-2" onClick={() => setTimes((c) => [...c, '20:00'])}>
+                <Button
+                  variant="quiet"
+                  className="mt-1.5 px-2"
+                  onClick={() => setTimes((c) => [...c, '20:00'])}
+                >
                   Add another time
                 </Button>
+              )}
+              {silenced.length > 0 && (
+                <div className="mt-2.5">
+                  <Note tone="alert">
+                    {silenced.length === 1
+                      ? `${silenced[0]} falls`
+                      : `${silenced.join(' and ')} fall`}{' '}
+                    inside your quiet hours ({quietStart}–{quietEnd}).{' '}
+                    {kind === 'medicine'
+                      ? 'A medicine you deliberately schedule there is still allowed through, so this will arrive.'
+                      : 'A supplement is not allowed to interrupt quiet hours, so no reminder will arrive — it will only appear on Today. Move the time, or shorten quiet hours in Settings.'}
+                  </Note>
+                </div>
               )}
             </div>
           )}
@@ -510,7 +608,12 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
           <div>
             <span className="eyebrow">With food</span>
             <div className="mt-1.5">
-              <Choices columns={2} value={[foodRule]} onChange={([v]) => v && setFoodRule(v)} options={FOOD_OPTIONS} />
+              <Choices
+                columns={2}
+                value={[foodRule]}
+                onChange={([v]) => v && setFoodRule(v)}
+                options={FOOD_OPTIONS}
+              />
             </div>
           </div>
         </div>
@@ -534,10 +637,18 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
         {isCourse && (
           <div className="mt-2 grid grid-cols-2 gap-2.5">
             <Field label="Starts">
-              <TextInput type="date" value={courseStart} onChange={(e) => setCourseStart(e.target.value)} />
+              <TextInput
+                type="date"
+                value={courseStart}
+                onChange={(e) => setCourseStart(e.target.value)}
+              />
             </Field>
             <Field label="Ends">
-              <TextInput type="date" value={courseEnd} onChange={(e) => setCourseEnd(e.target.value)} />
+              <TextInput
+                type="date"
+                value={courseEnd}
+                onChange={(e) => setCourseEnd(e.target.value)}
+              />
             </Field>
           </div>
         )}
@@ -599,7 +710,10 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
           <Eyebrow>Worth knowing</Eyebrow>
           <ul className="mt-2 flex flex-col gap-2">
             {absorption.map((note) => (
-              <li key={note.id} className="flex gap-2.5 text-[0.9375rem] leading-snug text-ink-soft">
+              <li
+                key={note.id}
+                className="flex gap-2.5 text-[0.9375rem] leading-snug text-ink-soft"
+              >
                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-walk" />
                 {note.text}
               </li>
@@ -610,7 +724,8 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
 
       {name && (
         <Note tone="neutral">
-          {preview.name} — {[doseLabel(preview), scheduleSummary(preview)].filter(Boolean).join(', ')}.
+          {preview.name} —{' '}
+          {[doseLabel(preview), scheduleSummary(preview)].filter(Boolean).join(', ')}.
         </Note>
       )}
 

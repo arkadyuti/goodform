@@ -80,6 +80,15 @@ describe('dose reminders', () => {
     expect(dueReminders(context({ localTime: '10:00' }))).toEqual([]);
   });
 
+  it('still delivers a first nudge when the tick that should have sent it was late', () => {
+    // The scheduler ticks once a minute, so a restart or a slow minute can put
+    // the first tick after a dose outside the send window. That used to drop
+    // the reminder with nothing to retry it — for a medicine, silently.
+    const late = dueReminders(context({ localTime: '08:40' }));
+    expect(late).toHaveLength(1);
+    expect(late[0]!.attempt).toBe(1);
+  });
+
   it('sends nothing once the dose is ticked or skipped', () => {
     const items = [item()];
     for (const status of ['taken', 'skipped'] as const) {

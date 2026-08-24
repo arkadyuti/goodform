@@ -67,6 +67,17 @@ export interface DueReminder {
 /** How late a nudge may still be worth sending. Wider than the tick, so a
  *  restarted server does not silently swallow the window. */
 export const SEND_WINDOW_MINUTES = 15;
+/**
+ * How late a *first* nudge may still go out.
+ *
+ * Not a licence to nag: once a nudge has been sent and ignored, nothing else
+ * follows, and that rule is unchanged. This covers the different case where the
+ * nudge was never delivered at all — the fifteen minute send window depended on
+ * a tick landing inside it, so a deploy, a restart or a busy minute silently
+ * lost the reminder with nothing to retry it. Forty-five minutes survives all
+ * of those and still leaves the app quiet hours later, which is the point.
+ */
+export const CATCH_UP_MINUTES = 45;
 /** A medicine still unmarked this long after its nudge gets one more. */
 export const ESCALATION_DELAY_MINUTES = 30;
 
@@ -86,14 +97,18 @@ export interface ReminderContext {
   records: Map<string, ReminderRecord>;
 }
 
-function recordFor(context: ReminderContext, kind: ReminderKind, key: string): ReminderRecord | undefined {
+function recordFor(
+  context: ReminderContext,
+  kind: ReminderKind,
+  key: string,
+): ReminderRecord | undefined {
   return context.records.get(`${kind}:${key}`);
 }
 
-/** True when the scheduled minute has passed but not by more than the window. */
-function inWindow(scheduled: string, now: string): boolean {
+/** True when the scheduled minute has passed but not by more than `limit`. */
+function inWindow(scheduled: string, now: string, limit: number = SEND_WINDOW_MINUTES): boolean {
   const delta = minutesOfDay(now) - minutesOfDay(scheduled);
-  return delta >= 0 && delta <= SEND_WINDOW_MINUTES;
+  return delta >= 0 && delta <= limit;
 }
 
 function quiet(prefs: ReminderPrefs, time: string): boolean {
@@ -102,7 +117,8 @@ function quiet(prefs: ReminderPrefs, time: string): boolean {
 
 function snoozeReady(record: ReminderRecord | undefined, context: ReminderContext): boolean {
   if (!record?.snoozedUntilDate || record.snoozedUntilMinutes === null) return false;
-  if (record.snoozedUntilDate !== context.localDate) return record.snoozedUntilDate < context.localDate;
+  if (record.snoozedUntilDate !== context.localDate)
+    return record.snoozedUntilDate < context.localDate;
   return minutesOfDay(context.localTime) >= record.snoozedUntilMinutes;
 }
 
@@ -139,7 +155,12 @@ export function reminderCopy(
     };
   }
   const dose = doseLabel(item);
-  const withFood = item.foodRule === 'with_food' ? ' — with food' : item.foodRule === 'empty_stomach' ? ' — empty stomach' : '';
+  const withFood =
+    item.foodRule === 'with_food'
+      ? ' — with food'
+      : item.foodRule === 'empty_stomach'
+        ? ' — empty stomach'
+        : '';
   return {
     title: item.name,
     body: `${dose ? `${dose}${withFood}` : `Due now${withFood}`}${attempt > 1 ? ' · still unticked' : ''}`,
@@ -148,7 +169,10 @@ export function reminderCopy(
 
 const SESSION_COPY: Record<'run' | 'strength', { title: string; body: string }> = {
   run: { title: 'Running day', body: 'Your session is ready whenever it suits you.' },
-  strength: { title: 'Strength day', body: 'About fifteen minutes of calves, shins and single-leg work.' },
+  strength: {
+    title: 'Strength day',
+    body: 'About fifteen minutes of calves, shins and single-leg work.',
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -182,8 +206,12 @@ export function dueReminders(context: ReminderContext): DueReminder[] {
       const scheduledInQuiet = quiet(prefs, dose.dueTime);
       const mayInterrupt = !nowQuiet || (medicine && scheduledInQuiet);
 
-      const resumingSnooze = snoozeReady(record, context) && record !== undefined && snoozeUnsent(record);
-      const firstNudge = (record?.attempts ?? 0) === 0 && inWindow(dose.dueTime, localTime);
+      const resumingSnooze =
+        snoozeReady(record, context) && record !== undefined && snoozeUnsent(record);
+      // A dose that has never been nudged stays eligible past the send window,
+      // so a tick that arrives late still delivers rather than dropping it.
+      const firstNudge =
+        (record?.attempts ?? 0) === 0 && inWindow(dose.dueTime, localTime, CATCH_UP_MINUTES);
 
       if ((firstNudge || resumingSnooze) && mayInterrupt) {
         const attempt = resumingSnooze ? Math.max(1, record!.attempts) : 1;
