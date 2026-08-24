@@ -140,6 +140,30 @@ export const DISCOMFORT_LOCATIONS = [
 ] as const;
 export type DiscomfortLocation = (typeof DISCOMFORT_LOCATIONS)[number];
 
+/**
+ * Perceived effort, 1–5, recorded after a session.
+ *
+ * Nothing in the plan engine keys off it: gates move on completion and
+ * discomfort alone. It exists so a runner can look back over a block and see
+ * that the same prescription got easier — which is the adaptation, and is
+ * otherwise invisible.
+ */
+export const EFFORT_LEVELS = [
+  { value: 1, label: 'Easy', hint: 'Full sentences throughout, could have gone much longer' },
+  { value: 2, label: 'Comfortable', hint: 'Talking was fine, never laboured' },
+  { value: 3, label: 'Steady', hint: 'Working, but in control the whole way' },
+  { value: 4, label: 'Hard', hint: 'Short phrases only, glad when it ended' },
+  { value: 5, label: 'All out', hint: 'As hard as you could go, nothing left' },
+] as const;
+
+export function effortLabel(value: number | null): string {
+  return EFFORT_LEVELS.find((level) => level.value === value)?.label ?? '';
+}
+
+export function effortHint(value: number | null): string {
+  return EFFORT_LEVELS.find((level) => level.value === value)?.hint ?? '';
+}
+
 export interface Discomfort {
   location: DiscomfortLocation;
   severity: 1 | 2 | 3 | 4 | 5;

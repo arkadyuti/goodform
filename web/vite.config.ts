@@ -27,6 +27,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Pulled into the generated worker so push and notification taps are
+        // handled. A service worker cannot wake itself, so this is the only
+        // code path the server's scheduler can actually reach.
+        importScripts: ['/push-sw.js'],
+        // It is imported, not precached — precaching it would have the worker
+        // cache a copy of part of itself.
+        globIgnores: ['**/push-sw.js'],
         // A session already open must keep running with no network (FR-4.6).
         navigateFallback: '/index.html',
         runtimeCaching: [
@@ -40,7 +47,11 @@ export default defineConfig({
             // cache when the network is gone — that is what lets a signed-in
             // runner open the app mid-session with no signal (FR-4.6).
             urlPattern: ({ url, request }) =>
-              url.pathname.startsWith('/api/') && request.method === 'GET',
+              url.pathname.startsWith('/api/') &&
+              request.method === 'GET' &&
+              // Exports are one-off downloads of the whole account; caching
+              // them would fill the quota and serve a stale copy next time.
+              !url.pathname.startsWith('/api/account/export'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'app-data',
@@ -51,7 +62,10 @@ export default defineConfig({
           },
         ],
       },
-      devOptions: { enabled: false },
+      // A service worker in development too. Without one there is nothing to
+      // receive a push, and `navigator.serviceWorker.ready` simply never
+      // settles — so the reminder switch appeared to do nothing at all.
+      devOptions: { enabled: true, type: 'module', navigateFallback: 'index.html' },
     }),
   ],
   server: {

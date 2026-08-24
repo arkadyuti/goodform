@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { StopReason } from '@goodform/shared';
 import { Button, Choices, Eyebrow, Note } from './ui.tsx';
 import { Cues, hapticsSupported } from '../timer/cues.ts';
@@ -40,17 +40,32 @@ export function BaselineRun({
     };
   }, [cues]);
 
+  const beginRun = useCallback(() => {
+    cues.runCue();
+    startedAt.current = Date.now();
+    setElapsed(0);
+    setStage('run');
+  }, [cues]);
+
   // Wall-clock, so a locked screen mid-walk does not lose the time.
+  //
+  // The warm-up handover lives in the same tick rather than in an effect
+  // watching `elapsed`: it is the clock reaching a threshold that ends the
+  // walk, and reading that off the clock directly means there is no render in
+  // between where the two could disagree.
   useEffect(() => {
     if (stage !== 'walk' && stage !== 'run') return;
-    const id = window.setInterval(() => setElapsed((Date.now() - startedAt.current) / 1000), 200);
+    const id = window.setInterval(() => {
+      const seconds = (Date.now() - startedAt.current) / 1000;
+      if (stage === 'walk' && seconds >= WARMUP_SEC) {
+        window.clearInterval(id);
+        beginRun();
+        return;
+      }
+      setElapsed(seconds);
+    }, 200);
     return () => window.clearInterval(id);
-  }, [stage]);
-
-  useEffect(() => {
-    if (stage === 'walk' && elapsed >= WARMUP_SEC) beginRun();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, elapsed]);
+  }, [stage, beginRun]);
 
   const beginWalk = async () => {
     await cues.arm();
@@ -58,13 +73,6 @@ export function BaselineRun({
     startedAt.current = Date.now();
     setElapsed(0);
     setStage('walk');
-  };
-
-  const beginRun = () => {
-    cues.runCue();
-    startedAt.current = Date.now();
-    setElapsed(0);
-    setStage('run');
   };
 
   const stopRun = () => {

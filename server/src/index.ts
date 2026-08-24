@@ -8,11 +8,15 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auth } from './auth.js';
 import { env, googleEnabled } from './env.js';
+import { accountDeleteRoutes, accountRoutes } from './routes/account.js';
 import { logRoutes, nutritionRoutes } from './routes/logs.js';
 import { planRoutes } from './routes/plan.js';
 import { profileRoutes } from './routes/profile.js';
 import { progressRoutes } from './routes/progress.js';
+import { pushRoutes } from './routes/push.js';
+import { regimenRoutes } from './routes/regimen.js';
 import { sessionRoutes } from './routes/sessions.js';
+import { startScheduler } from './scheduler.js';
 
 const app = new Hono();
 
@@ -38,6 +42,10 @@ app.route('/api/sessions', sessionRoutes);
 app.route('/api/logs', logRoutes);
 app.route('/api/nutrition', nutritionRoutes);
 app.route('/api/progress', progressRoutes);
+app.route('/api/regimen', regimenRoutes);
+app.route('/api/push', pushRoutes);
+app.route('/api/account', accountRoutes);
+app.route('/api/account', accountDeleteRoutes);
 
 /**
  * Locates the built SPA by walking up from this module, so the server runs the
@@ -69,10 +77,22 @@ if (env.isProd) {
   }
 }
 
+let stopScheduler: () => void = () => {};
+
 serve({ fetch: app.fetch, port: env.port }, (info) => {
   console.log(`GoodForm API on http://localhost:${info.port}`);
   console.log(`  Google login: ${googleEnabled ? 'enabled' : 'not configured'}`);
   console.log(`  Dev login:    ${env.devLogin ? 'enabled' : 'disabled'}`);
+  // Reminders need a process that is awake between requests: a service worker
+  // cannot wake itself, so the schedule lives here.
+  stopScheduler = startScheduler();
 });
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    stopScheduler();
+    process.exit(0);
+  });
+}
 
 export type AppType = typeof app;

@@ -23,12 +23,14 @@ export function isToday(date: string): boolean {
 }
 
 /**
- * Sessions land on a fixed weekly rhythm: runs on Mon/Wed/Sat, strength on
- * Tue/Fri — always a day between a run and the strength work (FR-5.3).
+ * The weekly rhythm now lives in the shared package, because the reminder
+ * scheduler needs the same answer the client does. Re-exported here so every
+ * existing call site keeps working.
  */
-export function scheduleFor(date: string): 'run' | 'strength' | 'rest' {
-  const day = new Date(`${date}T12:00:00`).getDay();
-  if (day === 1 || day === 3 || day === 6) return 'run';
-  if (day === 2 || day === 5) return 'strength';
-  return 'rest';
+export { scheduleFor, type ScheduledDay } from '@goodform/shared';
+
+/** Local wall-clock time as `HH:MM` — what "overdue" is measured against. */
+export function nowTime(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }

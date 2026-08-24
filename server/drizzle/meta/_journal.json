@@ -22,6 +22,20 @@
       "when": 1787595897741,
       "tag": "0002_add_daily_beers",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787597093005,
+      "tag": "0003_add_regimen_reminders_and_guardrails",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787599076769,
+      "tag": "0004_session_time_clear_of_quiet_hours",
+      "breakpoints": true
     }
   ]
 }

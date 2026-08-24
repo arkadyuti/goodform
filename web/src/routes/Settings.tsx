@@ -1,10 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useProfile, useSaveSettings } from '../api/hooks.ts';
+import { minutesOfDay, timeFromMinutes, withinWindow } from '@goodform/shared';
+import {
+  useDeleteAccount,
+  useProfile,
+  useRegimenItems,
+  useRestoreTargets,
+  useSaveSettings,
+  type Settings,
+} from '../api/hooks.ts';
 import { signOut, useSession } from '../lib/auth.ts';
 import { clearDraft } from '../lib/onboardingDraft.ts';
+import { useInstallState } from '../lib/install.ts';
+import {
+  browserTimezone,
+  currentSubscription,
+  pushSupport,
+  sendTestPush,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from '../lib/push.ts';
 import { audioSessionSupported, hapticsSupported } from '../timer/cues.ts';
 import { ScreenWakeLock } from '../timer/wakeLock.ts';
+import { ExportCard } from './Progress.tsx';
 import { Button, Card, Choices, Eyebrow, Field, Note, TextInput } from '../components/ui.tsx';
 
 const HABITS = [
@@ -199,6 +217,37 @@ export function SettingsView() {
         </Card>
       )}
 
+      <RemindersCard settings={settings} />
+
+      <Card>
+        <Eyebrow>Around a session</Eyebrow>
+        <div className="mt-2">
+          <Field label="When you usually train" hint="Drives the fuelling notes, and the nudge an hour before.">
+            <TextInput
+              type="time"
+              value={settings.sessionTime}
+              onChange={(e) => save.mutate({ sessionTime: e.target.value })}
+            />
+          </Field>
+        </div>
+        <label className="mt-3 flex items-center justify-between gap-4 border-t border-line pt-3">
+          <span>
+            <span className="block">Fuelling notes</span>
+            <span className="block text-[0.8125rem] leading-snug text-ink-soft">
+              What to eat before and after, timed to the session rather than to meal names.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={settings.fuellingTips}
+            onChange={(e) => save.mutate({ fuellingTips: e.target.checked })}
+            className="h-6 w-6 shrink-0 accent-[#1b3fd8]"
+          />
+        </label>
+      </Card>
+
+      {settings.targetsWithdrawnAt && <RestoreTargetsCard />}
+
       <Card>
         <Eyebrow>Your profile</Eyebrow>
         <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
@@ -208,6 +257,8 @@ export function SettingsView() {
           Edit profile
         </Button>
       </Card>
+
+      <ExportCard />
 
       <Note>
         Your health data stays on your own server and is never sold or shared. GoodForm gives general fitness
@@ -225,6 +276,374 @@ export function SettingsView() {
       >
         Sign out
       </Button>
+
+      <DeleteAccountCard email={session?.user?.email ?? ''} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reminders (P3, P3.1)
+// ---------------------------------------------------------------------------
+
+const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * Permission is asked for here, from a switch the user has just reached for —
+ * never on load. A notification prompt that arrives before anyone knows what it
+ * is for gets denied, and a denied permission cannot be asked for twice.
+ */
+function RemindersCard({ settings }: { settings: Settings }) {
+  const save = useSaveSettings();
+  const { data: regimenData } = useRegimenItems();
+  const install = useInstallState();
+
+  const [support] = useState(pushSupport);
+  const [subscribed, setSubscribed] = useState<boolean | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void currentSubscription().then((subscription) => setSubscribed(Boolean(subscription)));
+  }, []);
+
+  /** On only when the account wants them *and* this browser can receive them. */
+  const on = settings.remindersEnabled && subscribed === true;
+  const hasItems = (regimenData?.items ?? []).length > 0;
+
+  // The session nudge is derived, an hour before training, so it can land
+  // inside quiet hours without the runner ever choosing that. Quiet hours win
+  // — but silently losing a reminder is worse than the conflict itself.
+  const sessionNudge = timeFromMinutes(minutesOfDay(settings.sessionTime) - 60);
+  const nudgeIsSilenced = withinWindow(sessionNudge, settings.quietHoursStart, settings.quietHoursEnd);
+
+  const enable = async () => {
+    setBusy(true);
+    setMessage(null);
+    const result = await subscribeToPush();
+    if (result.ok) {
+      // Read it back rather than assuming: the browser is the authority on
+      // whether a subscription exists, not the call that just made one.
+      setSubscribed(Boolean(await currentSubscription()));
+      // The timezone is captured here rather than guessed on the server: the
+      // schedule is written in local time and has to stay local.
+      await save.mutateAsync({ remindersEnabled: true, timezone: browserTimezone() });
+      const delivered = await sendTestPush();
+      setMessage(
+        delivered > 0
+          ? 'Reminders are on. A test notification has just gone out.'
+          : 'Reminders are on, though the test notification did not arrive. They are best-effort on every phone.',
+      );
+    } else {
+      setMessage(result.reason ?? 'Could not turn reminders on.');
+    }
+    setBusy(false);
+  };
+
+  const disable = async () => {
+    setBusy(true);
+    await unsubscribeFromPush();
+    await save.mutateAsync({ remindersEnabled: false });
+    setSubscribed(false);
+    setMessage(null);
+    setBusy(false);
+  };
+
+  return (
+    <Card>
+      <Eyebrow>Reminders</Eyebrow>
+      <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
+        Everything due already shows on Today, with no permission needed. Notifications add a nudge at the time
+        itself — useful, and never something the app relies on.
+      </p>
+
+      {support.state === 'needs_install' && (
+        <div className="mt-3">
+          <Note tone="alert">{support.reason}</Note>
+          {install.kind === 'prompt' ? (
+            <Button className="mt-2.5" onClick={() => void install.install()}>
+              Install GoodForm
+            </Button>
+          ) : install.kind === 'manual' ? (
+            <p className="mt-2.5 text-[0.875rem] leading-relaxed text-ink-soft">{install.steps}</p>
+          ) : null}
+        </div>
+      )}
+
+      {(support.state === 'unsupported' || support.state === 'denied') && (
+        <div className="mt-3">
+          <Note tone="alert">{support.reason}</Note>
+        </div>
+      )}
+
+      {support.state === 'ready' && (
+        <>
+          {!hasItems && !settings.remindersEnabled && (
+            <p className="mt-3 rounded-xl bg-chalk-deep px-3.5 py-3 text-[0.875rem] leading-relaxed text-ink-soft">
+              You can turn these on now, but they are most useful once there is something on your list. Sessions
+              and the weekly check-in are covered either way.
+            </p>
+          )}
+
+          <div className="mt-3">
+            {on ? (
+              <Button variant="secondary" full disabled={busy} onClick={disable}>
+                Turn reminders off
+              </Button>
+            ) : (
+              <Button full disabled={busy} onClick={enable}>
+                {busy ? 'Setting up…' : 'Turn on reminders'}
+              </Button>
+            )}
+          </div>
+
+          {/*
+            Two things have to be true, and they can disagree: the account wants
+            reminders, and *this browser* is registered to receive them. Signing
+            in on a second device leaves the first true and the second false, so
+            say which it is rather than showing one switch for both.
+          */}
+          {subscribed !== null && (
+            <p className="mt-2.5 text-[0.875rem] leading-relaxed text-ink-soft">
+              {on
+                ? 'This browser is set up to receive them.'
+                : settings.remindersEnabled && !subscribed
+                  ? 'Reminders are on for your account, but this browser is not registered for them yet. Turning them on here adds this device.'
+                  : 'Not set up on this browser.'}
+            </p>
+          )}
+
+          {message && (
+            <p className="mt-2.5 text-[0.875rem] leading-relaxed text-ink-soft">{message}</p>
+          )}
+
+          {settings.remindersEnabled && (
+            <div className="mt-3.5 border-t border-line pt-1">
+              <Toggle
+                label="Doses"
+                hint="What is on your list, at the times you set."
+                checked={settings.regimenReminders}
+                onChange={(regimenReminders) => save.mutate({ regimenReminders })}
+              />
+              <Toggle
+                label="Sessions"
+                hint={`One nudge at ${sessionNudge}, an hour before you train. Never repeated — a missed session is not chased.`}
+                checked={settings.sessionReminders}
+                onChange={(sessionReminders) => save.mutate({ sessionReminders })}
+              />
+              {settings.sessionReminders && nudgeIsSilenced && (
+                <p className="border-b border-line py-3 text-[0.875rem] leading-relaxed text-walk-deep">
+                  That {sessionNudge} nudge falls inside your quiet hours, so it will not arrive. Train later, or
+                  move quiet hours to end before {sessionNudge}.
+                </p>
+              )}
+              <Toggle
+                label="Weekly check-in"
+                hint="Weight, waist and resting heart rate."
+                checked={settings.weeklyCheckReminders}
+                onChange={(weeklyCheckReminders) => save.mutate({ weeklyCheckReminders })}
+              />
+
+              {settings.weeklyCheckReminders && (
+                <div className="border-b border-line py-3">
+                  <span className="eyebrow">Check-in day</span>
+                  <div className="mt-1.5 flex gap-1.5">
+                    {DAY_LETTERS.map((letter, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        aria-pressed={settings.weeklyCheckDay === index}
+                        aria-label={DAY_NAMES[index]}
+                        onClick={() => save.mutate({ weeklyCheckDay: index })}
+                        className={`tap flex-1 rounded-xl border text-[0.875rem] transition-colors ${
+                          settings.weeklyCheckDay === index
+                            ? 'border-ink bg-ink text-chalk'
+                            : 'border-line bg-paper hover:border-ink-faint'
+                        }`}
+                      >
+                        {letter}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2.5">
+                    <Field label="Time">
+                      <TextInput
+                        type="time"
+                        value={settings.weeklyCheckTime}
+                        onChange={(e) => save.mutate({ weeklyCheckTime: e.target.value })}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              <div className="border-b border-line py-3">
+                <span className="eyebrow">Quiet hours</span>
+                <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-soft">
+                  Nothing arrives in this window — except a medicine you deliberately scheduled inside it.
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2.5">
+                  <Field label="From">
+                    <TextInput
+                      type="time"
+                      value={settings.quietHoursStart}
+                      onChange={(e) => save.mutate({ quietHoursStart: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Until">
+                    <TextInput
+                      type="time"
+                      value={settings.quietHoursEnd}
+                      onChange={(e) => save.mutate({ quietHoursEnd: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              <Toggle
+                label="Keep names off the lock screen"
+                hint="A medicine name is health data. With this on, a notification says only that something is due."
+                checked={settings.hideNamesInNotifications}
+                onChange={(hideNamesInNotifications) => save.mutate({ hideNamesInNotifications })}
+              />
+              <Toggle
+                label="Second nudge for medicines"
+                hint="One more, half an hour later, if a medicine is still unticked. Supplements never get this."
+                checked={settings.medicineEscalation}
+                onChange={(medicineEscalation) => save.mutate({ medicineEscalation })}
+              />
+
+              <p className="pt-3 text-[0.8125rem] leading-relaxed text-ink-faint">
+                Times are read in {settings.timezone}. They stay put across time zones and clock changes — 08:00
+                is 08:00 wherever you are.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {install.kind !== 'installed' && support.state === 'ready' && install.kind === 'prompt' && (
+        <Button variant="quiet" full className="mt-3 py-3" onClick={() => void install.install()}>
+          Install GoodForm on this device
+        </Button>
+      )}
+    </Card>
+  );
+}
+
+function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 border-b border-line py-3">
+      <span>
+        <span className="block">{label}</span>
+        {hint && <span className="block text-[0.8125rem] leading-snug text-ink-soft">{hint}</span>}
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-6 w-6 shrink-0 accent-[#1b3fd8]"
+      />
+    </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Guardrails and account (P3)
+// ---------------------------------------------------------------------------
+
+function RestoreTargetsCard() {
+  const restore = useRestoreTargets();
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <Card className="border-walk">
+      <Eyebrow className="!text-walk-deep">Your targets</Eyebrow>
+      <p className="mt-1.5 leading-relaxed text-ink-soft">
+        GoodForm put your protein target and weight figures away because of the pattern in the last few weeks.
+        You can have them back — it is your call, and asking twice would just be an app arguing with you.
+      </p>
+      {confirming ? (
+        <div className="mt-3 flex gap-2.5">
+          <Button full disabled={restore.isPending} onClick={() => restore.mutate()}>
+            Yes, show them again
+          </Button>
+          <Button variant="quiet" onClick={() => setConfirming(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <Button variant="secondary" className="mt-3" onClick={() => setConfirming(true)}>
+          Show my targets again
+        </Button>
+      )}
+    </Card>
+  );
+}
+
+/** P3: GDPR self-serve deletion. Deliberately hard to reach by accident. */
+function DeleteAccountCard({ email }: { email: string }) {
+  const remove = useDeleteAccount();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return (
+      <Button variant="quiet" full className="py-3 !text-alert" onClick={() => setOpen(true)}>
+        Delete my account
+      </Button>
+    );
+  }
+
+  return (
+    <Card className="border-alert bg-alert-wash">
+      <Eyebrow className="!text-alert">Delete everything</Eyebrow>
+      <p className="mt-1.5 leading-relaxed">
+        This removes your profile, plans, every session, every log, your list and the foods you added. It happens
+        immediately and cannot be undone. Download your data first if you want to keep it.
+      </p>
+      <div className="mt-3">
+        <Field label="Type your email address to confirm" hint={email}>
+          <TextInput value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+        </Field>
+      </div>
+      {error && <p className="mt-2 text-[0.875rem] text-alert">{error}</p>}
+      <div className="mt-3 flex gap-2.5">
+        <Button
+          variant="alert"
+          full
+          disabled={remove.isPending || typed.trim().toLowerCase() !== email.toLowerCase()}
+          onClick={async () => {
+            setError(null);
+            try {
+              await remove.mutateAsync(typed.trim());
+              // The session row went with the user row, so this only clears
+              // the cookie the browser is still holding.
+              await signOut().catch(() => {});
+              window.location.href = '/';
+            } catch (caught) {
+              setError(caught instanceof Error ? caught.message : 'Could not delete the account.');
+            }
+          }}
+        >
+          Delete my account
+        </Button>
+        <Button variant="quiet" onClick={() => setOpen(false)}>
+          Keep it
+        </Button>
+      </div>
+    </Card>
   );
 }

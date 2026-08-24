@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/index.js';
 import { requireAuth, type AppEnv } from '../middleware.js';
@@ -11,7 +11,6 @@ const dailyLogSchema = z.object({
   beers: z.number().int().min(0).max(50).optional(),
   cigarettes: z.number().int().min(0).max(100).optional(),
   customHabits: z.record(z.number()).optional(),
-  supplements: z.record(z.boolean()).optional(),
   notes: z.string().max(1000).nullish(),
 });
 

@@ -27,6 +27,19 @@ walk, so a glance at arm's length in daylight tells you what to do.
 **Tracks the rest of it.** Water, sleep, cigarettes, beer, other alcohol, your
 own custom habits, and protein against a target derived from your weight. No
 calorie counting — you are building tissue, and that doesn't happen in a hole.
+If the pattern in your logs turns into one where a number on a screen makes
+eating harder, the numbers go away until you ask for them back.
+
+**Holds your list.** Supplements and medicines, on separate footings. A missed
+shake is nothing; a missed course of antibiotics is not, so only medicines get a
+second nudge, only medicines are allowed through quiet hours they were
+deliberately scheduled into, and a medicine's name never reaches a lock screen
+unless you say so. Courses count down and stop on their own.
+
+**Shows what changed.** Longest interval, resting heart rate, waist, weight and
+strength level, each on its own chart because they share no scale. A weekly
+review for any week, every session openable in full, and the whole account
+downloadable as JSON or CSV whenever you want it.
 
 ## Stack
 
@@ -63,6 +76,25 @@ single port, in production.
 
 `pnpm db:migrate` again after any pull that touches `server/src/db/schema.ts`.
 To change the schema, edit it and run `pnpm db:generate` to write a migration.
+
+### Reminders
+
+Scheduled reminders need a VAPID key pair — a service worker cannot wake itself,
+so the schedule lives in the server process and pushes to the browser:
+
+```bash
+pnpm --filter @goodform/server keys:vapid   # prints the two keys for .env
+```
+
+Without them the app still works: everything due appears on Today, permission is
+never requested, and Settings says why. With them, the server ticks once a
+minute, resolves each user's wall clock through their own IANA timezone — so a
+schedule survives travel and DST unshifted — and respects quiet hours. Set
+`REMINDER_SCHEDULER=false` to stop the tick.
+
+On iPhone and iPad, Web Push only works once the app is on the home screen
+(iOS 16.4+). GoodForm detects that case and offers the install step instead of
+a prompt that would do nothing.
 
 ### Tests
 
@@ -111,6 +143,13 @@ belong to nobody. Hard-refresh afterwards to clear the stale session cookie.
 serves both the API and the built app from one process, locating `web/dist` by
 walking up from its own directory, so it runs the same from the repo root or
 from `dist/`. Put Caddy in front for TLS.
+
+## Your data
+
+Everything is exportable from Settings or Progress: one JSON file holding the
+whole account, or a CSV per dataset — sessions, daily habits, food,
+measurements, plan weeks, your list, doses. Account deletion is self-serve,
+behind typing your own email address, and cascades through every table.
 
 ## Offline
 

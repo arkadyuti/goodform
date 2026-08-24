@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ALTER COLUMN "session_time" SET DEFAULT '08:00';

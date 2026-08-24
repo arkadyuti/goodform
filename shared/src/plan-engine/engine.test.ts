@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Baseline, PlanWeek, Profile, WorkoutSession } from '../types.js';
 import { MAX_WEEKLY_GROWTH, generatePlan } from './generate.js';
 import { evaluateWeek, returnFromBreak } from './gating.js';
+import { needsFreshBaseline, nextGoalOptions, summariseBlock } from './reassess.js';
 import { buildStrengthSessions, substitute } from './strength.js';
 import { daysClear } from '../habits.js';
 import { STRENGTH_EXERCISES } from '../content/strength.js';
@@ -250,5 +251,85 @@ describe('daysClear', () => {
     expect(daysClear(logs, ['alcoholUnits', 'beers'])).toBe(1);
     // Counting units alone would have missed it entirely.
     expect(daysClear(logs, 'alcoholUnits')).toBe(3);
+  });
+});
+
+describe('block reassessment', () => {
+  const weeks: PlanWeek[] = Array.from({ length: 8 }, (_, i) =>
+    ({ index: i + 1, runSec: 120 + i * 60, walkSec: 60, reps: 4, sessionsPerWeek: 3, isDeload: false, totalRunSec: 0 }),
+  );
+
+  const finished = (over: Partial<WorkoutSession> = {}) =>
+    session({ prescription: { index: 8, runSec: 540, walkSec: 60, reps: 2, sessionsPerWeek: 3, isDeload: false, totalRunSec: 3240 }, ...over });
+
+  it('reads what was reached from what was logged, not what was prescribed', () => {
+    const outcome = summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [finished()]);
+    expect(outcome.achievedRunSec).toBe(540);
+    expect(outcome.continueFrom).toEqual({ runSec: 540, walkSec: 60, reps: 2 });
+  });
+
+  it('does not credit a week that was only skipped through', () => {
+    const outcome = summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [
+      finished({ completion: 'skipped' }),
+      session({ prescription: weeks[2]!, id: 'b' }),
+    ]);
+    expect(outcome.achievedRunSec).toBe(weeks[2]!.runSec);
+  });
+
+  it('falls back to the last completed week when nothing carries a prescription', () => {
+    const outcome = summariseBlock({ goal: 'five_k', currentWeek: 4 }, weeks, []);
+    expect(outcome.continueFrom).toEqual({ runSec: weeks[2]!.runSec, walkSec: 60, reps: 4 });
+  });
+
+  it('always offers holding where you are, and recommends it after real discomfort', () => {
+    const calm = nextGoalOptions(summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [finished()]));
+    expect(calm.some((o) => o.goal === 'general_fitness')).toBe(true);
+    expect(calm.find((o) => o.goal === 'five_k')?.recommended).toBe(true);
+
+    const sore = nextGoalOptions(
+      summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [
+        finished({ discomfort: { location: 'knee', severity: 4 } }),
+      ]),
+    );
+    expect(sore.find((o) => o.goal === 'five_k')?.recommended).toBe(false);
+    expect(sore.find((o) => o.goal === 'general_fitness')?.recommended).toBe(true);
+  });
+
+  it('asks for a fresh baseline after a long enough gap', () => {
+    const outcome = summariseBlock({ goal: 'five_k', currentWeek: 9 }, weeks, [finished()]);
+    expect(needsFreshBaseline(outcome, 20)).toBe(false);
+    expect(needsFreshBaseline(outcome, 60)).toBe(true);
+  });
+});
+
+describe('generatePlan continuing from a finished block', () => {
+  const continueFrom = { runSec: 540, walkSec: 60, reps: 2 };
+
+  it('starts where the last block finished instead of halving it', () => {
+    const plan = generatePlan({ ...baseProfile, goal: 'five_k' }, breathBaseline, '2026-08-24', { continueFrom });
+    expect(plan.weeks[0]!.runSec).toBe(540);
+    expect(plan.weeks[0]!.walkSec).toBe(60);
+    expect(plan.conservatismReasons[0]).toContain('where your last one finished');
+  });
+
+  it('still never grows weekly running time by more than 10%', () => {
+    const plan = generatePlan({ ...baseProfile, goal: 'ten_k' }, breathBaseline, '2026-08-24', { continueFrom });
+    plan.weeks.forEach((w, i) => {
+      if (i === 0) return;
+      const reference = [...plan.weeks.slice(0, i)].reverse().find((p) => !p.isDeload)!;
+      expect(w.totalRunSec).toBeLessThanOrEqual(reference.totalRunSec * MAX_WEEKLY_GROWTH + 0.001);
+    });
+  });
+
+  it('holds the distance rather than building when the goal is already reached', () => {
+    const plan = generatePlan({ ...baseProfile, goal: 'general_fitness' }, breathBaseline, '2026-08-24', {
+      continueFrom: { runSec: 1800, walkSec: 60, reps: 1 },
+    });
+    expect(plan.weeks.length).toBeGreaterThanOrEqual(6);
+    const building = plan.weeks.filter((w) => !w.isDeload);
+    expect(new Set(building.map((w) => w.runSec)).size).toBe(1);
+    expect(plan.weeks.some((w) => w.isDeload)).toBe(true);
+    expect(plan.weeks[plan.weeks.length - 1]!.isDeload).toBe(false);
+    expect(plan.conservatismReasons[0]).toContain('holds you there');
   });
 });

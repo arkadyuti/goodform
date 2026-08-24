@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { COOLDOWN_STRETCHES, COOLDOWN_WALK, RUN_CUES, STOP_RULES, WARMUP } from '@goodform/shared/content';
-import type { Discomfort, DiscomfortLocation } from '@goodform/shared';
+import { COOLDOWN_STRETCHES, COOLDOWN_WALK, RUN_CUES, WARMUP } from '@goodform/shared/content';
+import { effortHint, effortLabel, type Discomfort, type DiscomfortLocation } from '@goodform/shared';
 import { useLogSession, usePlan, useProfile } from '../api/hooks.ts';
 import { today } from '../lib/date.ts';
 import { Cues, hapticsSupported } from '../timer/cues.ts';
@@ -95,7 +95,10 @@ function Warmup({
   onQuit: () => void;
 }) {
   const [done, setDone] = useState<Record<string, boolean>>({});
-  const cue = useMemo(() => RUN_CUES[Math.floor(Math.random() * RUN_CUES.length)]!, []);
+  // One cue per visit to this screen, chosen when the screen mounts. Picking
+  // it during render would let it change under a re-render, so the runner
+  // would see the line swap while they were reading it.
+  const [cue] = useState(() => RUN_CUES[Math.floor(Math.random() * RUN_CUES.length)]!);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-5">
@@ -231,6 +234,11 @@ function Intervals({
       onFinish: finish,
     });
     timerRef.current = timer;
+    // The timer is the source of truth and it was just constructed, so React
+    // has to be told its opening state. This runs once per prescription, not
+    // per render, so it is a handoff from an external system rather than the
+    // cascading update the rule is aimed at.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(timer.state());
 
     return () => {
@@ -569,7 +577,10 @@ function PostSession({
               </button>
             ))}
           </div>
-          <p className="mt-1.5 text-[0.8125rem] text-ink-faint">1 is easy, 5 is as hard as you could go.</p>
+          <p className="mt-1.5 text-[0.8125rem] text-ink-faint">
+            <strong className="text-ink-soft">{effortLabel(effort)}</strong> — {effortHint(effort)}. This is for
+            your own reading of the block; it does not change the plan.
+          </p>
         </div>
 
         <div>

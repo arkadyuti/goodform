@@ -123,6 +123,44 @@ export const settings = pgTable('settings', {
   alcoholBaselinePerWeek: real('alcohol_baseline_per_week'),
   alcoholUnitCost: real('alcohol_unit_cost'),
   currency: text('currency').notNull().default('INR'),
+
+  // --- Reminders (P3, P3.1) ---------------------------------------------
+  /** IANA zone, set from the browser. Schedules are local and must survive
+   *  travel and DST without shifting, so the scheduler converts per user. */
+  timezone: text('timezone').notNull().default('UTC'),
+  remindersEnabled: boolean('reminders_enabled').notNull().default(false),
+  regimenReminders: boolean('regimen_reminders').notNull().default(true),
+  sessionReminders: boolean('session_reminders').notNull().default(true),
+  weeklyCheckReminders: boolean('weekly_check_reminders').notNull().default(true),
+  /** 0 = Sunday. */
+  weeklyCheckDay: integer('weekly_check_day').notNull().default(0),
+  weeklyCheckTime: text('weekly_check_time').notNull().default('09:30'),
+  quietHoursStart: text('quiet_hours_start').notNull().default('22:00'),
+  quietHoursEnd: text('quiet_hours_end').notNull().default('07:00'),
+  /** Medicine names are sensitive health data — off the lock screen by default. */
+  hideNamesInNotifications: boolean('hide_names_in_notifications').notNull().default(true),
+  /** A second nudge for medicines only. Supplements never nag. */
+  medicineEscalation: boolean('medicine_escalation').notNull().default(true),
+
+  /**
+   * When the runner usually trains: drives fuelling guidance and the nudge,
+   * which lands an hour earlier. Defaulted to 08:00 rather than 07:00 so that
+   * derived 07:00 nudge clears the default quiet window's 07:00 end — at 07:00
+   * the reminder would have been suppressed every single day, in silence.
+   */
+  sessionTime: text('session_time').notNull().default('08:00'),
+  fuellingTips: boolean('fuelling_tips').notNull().default(true),
+
+  // --- Nutrition guardrails (P3) -----------------------------------------
+  /** Set when a disordered pattern was detected and the numeric targets were
+   *  put away. Cleared only by the user, from Settings. */
+  targetsWithdrawnAt: timestamp('targets_withdrawn_at'),
+  targetsRestoredAt: timestamp('targets_restored_at'),
+  guardrailSignals: jsonb('guardrail_signals')
+    .$type<{ id: string; label: string; detail: string }[]>()
+    .notNull()
+    .default([]),
+
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -232,6 +270,12 @@ export const dailyLogs = pgTable(
     beers: integer('beers').notNull().default(0),
     cigarettes: integer('cigarettes').notNull().default(0),
     customHabits: jsonb('custom_habits').$type<Record<string, number>>().notNull().default({}),
+    /**
+     * Superseded by `regimen_events`, which timestamps what was actually taken
+     * and can tell an explicit skip from a silent gap — neither of which a map
+     * of booleans can do. Kept only so no existing row is dropped; nothing
+     * reads or writes it. Safe to remove in a later migration.
+     */
     supplements: jsonb('supplements').$type<Record<string, boolean>>().notNull().default({}),
     notes: text('notes'),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -298,4 +342,119 @@ export const strengthProgress = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.exerciseId] })],
+);
+
+// ---------------------------------------------------------------------------
+// Supplements and medicines (P3.1)
+// ---------------------------------------------------------------------------
+
+export const regimenItems = pgTable(
+  'regimen_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** supplement | medicine — drives urgency, escalation and tone throughout. */
+    kind: text('kind').notNull().default('supplement'),
+    doseAmount: real('dose_amount'),
+    /** tablet | capsule | scoop | ml | drops | sachet | other */
+    doseForm: text('dose_form').notNull().default('tablet'),
+    /** daily | weekdays | interval | as_needed */
+    scheduleKind: text('schedule_kind').notNull().default('daily'),
+    /** 0 = Sunday … 6 = Saturday. */
+    weekdays: jsonb('weekdays').$type<number[]>().notNull().default([]),
+    intervalDays: integer('interval_days').notNull().default(1),
+    /** The day the schedule counts from, and the first day anything is due. */
+    anchorDate: date('anchor_date').notNull(),
+    /** Local 'HH:MM', one per dose in a day. */
+    times: jsonb('times').$type<string[]>().notNull().default([]),
+    /** none | with_food | empty_stomach | before_bed */
+    foodRule: text('food_rule').notNull().default('none'),
+    courseStart: date('course_start'),
+    /** A course ends on its own rather than waiting to be switched off. */
+    courseEnd: date('course_end'),
+    /** Doses left in the packet, decremented as they are ticked. */
+    supplyCount: integer('supply_count'),
+    remindersEnabled: boolean('reminders_enabled').notNull().default(true),
+    notes: text('notes'),
+    /** Archived rather than deleted, so history and adherence survive. */
+    archivedAt: timestamp('archived_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('regimen_items_user_idx').on(t.userId)],
+);
+
+export const regimenEvents = pgTable(
+  'regimen_events',
+  {
+    /** Client-generated so an offline tick replays idempotently. */
+    id: uuid('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    itemId: uuid('item_id')
+      .notNull()
+      .references(() => regimenItems.id, { onDelete: 'cascade' }),
+    /** The day the dose was due — not necessarily the day it was taken. */
+    dueDate: date('due_date').notNull(),
+    /** 'HH:MM' of the scheduled dose; null for an as-needed dose. */
+    dueTime: text('due_time'),
+    /** taken | skipped. There is no third value: a gap stays a gap. */
+    status: text('status').notNull(),
+    /** When the tick actually happened, which is the point of a separate row. */
+    recordedAt: timestamp('recorded_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('regimen_events_user_date_idx').on(t.userId, t.dueDate),
+    // One row per scheduled dose, so replaying a queued write cannot double-log.
+    uniqueIndex('regimen_events_occurrence_idx').on(t.itemId, t.dueDate, t.dueTime),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Push delivery (P3, P3.1)
+// ---------------------------------------------------------------------------
+
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+  },
+  (t) => [index('push_subs_user_idx').on(t.userId)],
+);
+
+/**
+ * One row per reminder occurrence. Exists so a restarted scheduler cannot send
+ * the same nudge twice, so escalation can be counted, and so "remind me in 30
+ * minutes" has somewhere to live.
+ */
+export const reminders = pgTable(
+  'reminders',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** regimen | session | weekly_check */
+    kind: text('kind').notNull(),
+    /** Identifies the occurrence within its kind. */
+    key: text('key').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    lastSentAt: timestamp('last_sent_at'),
+    snoozedUntil: timestamp('snoozed_until'),
+    /** Set when the user acted from the notification — stop nudging. */
+    resolvedAt: timestamp('resolved_at'),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.kind, t.key] })],
 );

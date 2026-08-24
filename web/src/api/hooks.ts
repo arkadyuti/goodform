@@ -1,12 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  Adherence,
   DietaryPattern,
   Discomfort,
+  DoseState,
+  DoseStatus,
   FoodItem,
+  Goal,
   Profile,
+  RegimenItem,
   ScreeningFlag,
   StopReason,
+  WeeklyReview,
 } from '@goodform/shared';
+import { today } from '../lib/date.ts';
 import { api } from './client.ts';
 
 export interface ServerProfile extends Profile {
@@ -24,6 +31,25 @@ export interface Settings {
   alcoholBaselinePerWeek: number | null;
   alcoholUnitCost: number | null;
   currency: string;
+
+  timezone: string;
+  remindersEnabled: boolean;
+  regimenReminders: boolean;
+  sessionReminders: boolean;
+  weeklyCheckReminders: boolean;
+  weeklyCheckDay: number;
+  weeklyCheckTime: string;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  hideNamesInNotifications: boolean;
+  medicineEscalation: boolean;
+  sessionTime: string;
+  fuellingTips: boolean;
+
+  /** Set when the guardrails put the numeric targets away (P3). */
+  targetsWithdrawnAt: string | null;
+  targetsRestoredAt: string | null;
+  guardrailSignals: { id: string; label: string; detail: string }[];
 }
 
 export interface PlanRow {
@@ -58,7 +84,6 @@ export interface DailyLogRow {
   beers: number;
   cigarettes: number;
   customHabits: Record<string, number>;
-  supplements: Record<string, boolean>;
   notes: string | null;
 }
 
@@ -97,6 +122,13 @@ export const keys = {
   foods: (q: string, diet?: string) => ['foods', q, diet ?? ''] as const,
   progress: ['progress'] as const,
   strengthProgress: ['strength-progress'] as const,
+  trends: ['trends'] as const,
+  weeklyReview: (week: string) => ['weekly-review', week] as const,
+  sessionDetail: (id: string) => ['session-detail', id] as const,
+  blockOutcome: ['block-outcome'] as const,
+  regimenItems: ['regimen-items'] as const,
+  regimenDue: (date: string) => ['regimen-due', date] as const,
+  regimenHistory: (from: string) => ['regimen-history', from] as const,
 };
 
 export function useAuthConfig() {
@@ -135,8 +167,11 @@ export function useWeekReview(enabled = true) {
         gate: { decision: string; reason: string; overridable: boolean; strengthEmphasis: boolean };
         week: PlanWeekRow;
         range: { from: string; to: string };
+        /** False mid-week, when an attendance verdict would be premature. */
+        weekOver: boolean;
+        daysLeft: number;
         sessions: unknown[];
-      }>('/plan/week-review'),
+      }>(`/plan/week-review?date=${today()}`),
     enabled,
     retry: false,
   });
@@ -322,7 +357,6 @@ export function emptyLog(date: string): DailyLogRow {
     beers: 0,
     cigarettes: 0,
     customHabits: {},
-    supplements: {},
     notes: null,
   };
 }
@@ -392,5 +426,305 @@ export function useCreateFood() {
     mutationFn: (input: { name: string; servingLabel: string; proteinG: number }) =>
       api.post<{ food: FoodItem }>('/nutrition/foods', input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['foods'] }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Insight (P2)
+// ---------------------------------------------------------------------------
+
+export interface TrendPoint {
+  date: string;
+  value: number;
+}
+
+export interface Trends {
+  from: string;
+  to: string;
+  longestRun: TrendPoint[];
+  weight: TrendPoint[];
+  waist: TrendPoint[];
+  restingHr: TrendPoint[];
+  strengthLevel: TrendPoint[];
+  strengthSessions: TrendPoint[];
+  discomfort: { date: string; location: string; severity: number }[];
+}
+
+export function useTrends() {
+  return useQuery({
+    queryKey: keys.trends,
+    // The server has no idea what day it is where the runner is standing.
+    queryFn: () => api.get<Trends>(`/progress/trends?date=${today()}`),
+  });
+}
+
+export function useWeeklyReview(week: string) {
+  return useQuery({
+    queryKey: keys.weeklyReview(week),
+    queryFn: () =>
+      api.get<{ review: WeeklyReview; weeksAvailable: { earliest: string } }>(
+        `/progress/weekly-review?week=${week}&date=${today()}`,
+      ),
+  });
+}
+
+export interface SessionDetail {
+  session: SessionRow & {
+    exerciseLog: Record<string, number> | null;
+    notes: string | null;
+    intervalsCompleted: number | null;
+  };
+  dailyLog: DailyLogRow | null;
+  proteinG: number;
+  previous: { id: string; date: string } | null;
+  daysSincePrevious: number | null;
+}
+
+export function useSessionDetail(id: string | null) {
+  return useQuery({
+    queryKey: keys.sessionDetail(id ?? ''),
+    queryFn: () => api.get<SessionDetail>(`/progress/session/${id}`),
+    enabled: Boolean(id),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle (P3)
+// ---------------------------------------------------------------------------
+
+export interface BlockOutcome {
+  goal: Goal;
+  weeksPlanned: number;
+  weeksCompleted: number;
+  totalRepeats: number;
+  runsCompleted: number;
+  achievedRunSec: number;
+  achievedMinutes: number;
+  worstDiscomfort: number;
+  continueFrom: { runSec: number; walkSec: number; reps: number } | null;
+}
+
+export function useBlockOutcome(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.blockOutcome,
+    queryFn: () =>
+      api.get<{
+        plan: PlanRow;
+        outcome: BlockOutcome;
+        options: { goal: Goal; label: string; hint: string; recommended: boolean }[];
+        needsBaseline: boolean;
+        daysSinceLastRun: number | null;
+      }>('/plan/block-outcome'),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useReassess() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { goal: Goal; baseline?: { minutesRun: number; stopReason: StopReason } | null }) =>
+      api.post('/plan/reassess', input),
+    onSuccess: () => {
+      void qc.invalidateQueries();
+    },
+  });
+}
+
+export function useRestoreTargets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post('/profile/restore-targets', {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.profile }),
+  });
+}
+
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: (confirmEmail: string) => api.del('/account', { confirmEmail }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Supplements and medicines (P3.1)
+// ---------------------------------------------------------------------------
+
+export type RegimenItemInput = Omit<RegimenItem, 'id' | 'archivedAt'>;
+
+export function useRegimenItems(includeArchived = false) {
+  return useQuery({
+    queryKey: [...keys.regimenItems, includeArchived],
+    queryFn: () => api.get<{ items: RegimenItem[] }>(`/regimen/items${includeArchived ? '?all=true' : ''}`),
+  });
+}
+
+export interface RegimenDue {
+  date: string;
+  doses: DoseState[];
+  asNeeded: RegimenItem[];
+  finishedCourses: RegimenItem[];
+  items: RegimenItem[];
+}
+
+export function useRegimenDue(date: string, nowTime: string) {
+  return useQuery({
+    queryKey: keys.regimenDue(date),
+    queryFn: () => api.get<RegimenDue>(`/regimen/due?date=${date}&time=${nowTime}`),
+    // The overdue marks move with the clock, so this goes stale quickly.
+    staleTime: 60_000,
+  });
+}
+
+export interface RegimenHistoryRow {
+  item: RegimenItem;
+  adherence: Adherence;
+  lastTaken: string | null;
+  days: { date: string; taken: number; skipped: number; missed: number }[];
+}
+
+export function useRegimenHistory(from: string) {
+  return useQuery({
+    queryKey: keys.regimenHistory(from),
+    queryFn: () => api.get<{ from: string; to: string; items: RegimenHistoryRow[] }>(`/regimen/history?from=${from}`),
+  });
+}
+
+function invalidateRegimen(qc: ReturnType<typeof useQueryClient>) {
+  invalidateIfOnline(qc, [keys.regimenItems, ['regimen-due'], ['regimen-history']]);
+}
+
+export function useSaveRegimenItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...input }: RegimenItemInput & { id?: string }) =>
+      id ? api.put(`/regimen/items/${id}`, input) : api.post('/regimen/items', input),
+    onSuccess: () => invalidateRegimen(qc),
+  });
+}
+
+export function useArchiveRegimenItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; permanent?: boolean }) =>
+      api.del(`/regimen/items/${input.id}${input.permanent ? '?permanent=true' : ''}`),
+    onSuccess: () => invalidateRegimen(qc),
+  });
+}
+
+export function useRestoreRegimenItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/regimen/items/${id}/restore`, {}),
+    onSuccess: () => invalidateRegimen(qc),
+  });
+}
+
+export function useRefillRegimenItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; doses: number }) =>
+      api.post(`/regimen/items/${input.id}/refill`, { doses: input.doses }),
+    onSuccess: () => invalidateRegimen(qc),
+  });
+}
+
+/**
+ * Ticking a dose is a durable write: a medicine gets taken in a kitchen with
+ * no signal as often as anywhere else, and the tick must not evaporate.
+ */
+export function useLogDose(date: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { itemId: string; dueTime: string | null; status: DoseStatus }) => {
+      const id = crypto.randomUUID();
+      return api.durable(
+        '/regimen/events',
+        'POST',
+        { id, itemId: input.itemId, dueDate: date, dueTime: input.dueTime, status: input.status },
+        `dose:${input.itemId}:${date}:${input.dueTime ?? id}`,
+      );
+    },
+    onMutate: async (input) => {
+      await qc.cancelQueries({ queryKey: keys.regimenDue(date) });
+      const previous = qc.getQueryData<RegimenDue>(keys.regimenDue(date));
+      if (previous) {
+        qc.setQueryData<RegimenDue>(keys.regimenDue(date), {
+          ...previous,
+          doses: previous.doses.map((dose) =>
+            dose.item.id === input.itemId && dose.dueTime === input.dueTime
+              ? { ...dose, status: input.status, overdue: false }
+              : dose,
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) qc.setQueryData(keys.regimenDue(date), context.previous);
+    },
+    onSettled: () => invalidateRegimen(qc),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Calendar and backfill
+// ---------------------------------------------------------------------------
+
+export interface CalendarDay {
+  date: string;
+  scheduled: 'run' | 'strength' | 'rest';
+  sessions: {
+    id: string;
+    type: 'run' | 'strength' | 'baseline';
+    completion: 'full' | 'partial' | 'skipped';
+    effort: number | null;
+    discomfortLocation: string | null;
+    discomfortSeverity: number | null;
+    durationSec: number | null;
+    intervalsCompleted: number | null;
+    prescription: { runSec: number; walkSec: number; reps: number } | null;
+  }[];
+  log: DailyLogRow | null;
+  check: { weightKg: number | null; waistCm: number | null; restingHr: number | null } | null;
+  proteinG: number;
+  doses: { due: number; taken: number; skipped: number };
+}
+
+export function useCalendar(from: string, to: string) {
+  return useQuery({
+    queryKey: ['calendar', from, to],
+    queryFn: () => api.get<{ from: string; to: string; days: CalendarDay[] }>(
+      `/progress/calendar?from=${from}&to=${to}`,
+    ),
+  });
+}
+
+/**
+ * A session logged for a day that has already passed. Shares the durable write
+ * path with the live session player, so a backfill made offline survives too.
+ */
+export function useBackfillSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SessionInput) => api.durable('/sessions', 'POST', input, `session:${input.id}`),
+    onSettled: () =>
+      invalidateIfOnline(qc, [
+        ['sessions'],
+        ['calendar'],
+        keys.weekReview,
+        keys.progress,
+        keys.trends,
+        ['weekly-review'],
+        keys.strengthProgress,
+      ]),
+  });
+}
+
+export function useDeleteSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/sessions/${id}`),
+    onSettled: () =>
+      invalidateIfOnline(qc, [['sessions'], ['calendar'], keys.weekReview, keys.progress, keys.trends]),
   });
 }

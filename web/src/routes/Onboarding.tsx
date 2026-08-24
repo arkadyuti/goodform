@@ -70,23 +70,28 @@ export function Onboarding() {
   const { data: profileData } = useProfile();
   const { data: session } = useSession();
   const userId = session?.user?.id ?? '';
-  const restored = useRef(loadDraft(userId));
+  // Read once, lazily: the draft belongs to the first render and must not be
+  // re-read on every one. The ref beside it is only a latch recording whether
+  // the form has already been populated, so the effect below cannot clobber
+  // answers the runner has started typing.
+  const [saved] = useState(() => loadDraft(userId));
+  const restored = useRef(Boolean(saved));
   const lastSaved = useRef<string | null>(null);
   /** Whether a profile already existed when this screen opened. */
   const [editingExisting, setEditingExisting] = useState<boolean | null>(null);
 
-  const [step, setStep] = useState<Step>((restored.current?.step as Step) ?? 'about');
-  const [draft, setDraft] = useState<Partial<Profile>>(restored.current?.profile ?? EMPTY_PROFILE);
-  const [flags, setFlags] = useState<ScreeningFlag[]>(restored.current?.flags ?? []);
-  const [acknowledged, setAcknowledged] = useState(restored.current?.acknowledged ?? false);
-  const [minutesRun, setMinutesRun] = useState(restored.current?.minutesRun ?? '');
-  const [stopReason, setStopReason] = useState<StopReason | null>(restored.current?.stopReason ?? null);
+  const [step, setStep] = useState<Step>((saved?.step as Step) ?? 'about');
+  const [draft, setDraft] = useState<Partial<Profile>>(saved?.profile ?? EMPTY_PROFILE);
+  const [flags, setFlags] = useState<ScreeningFlag[]>(saved?.flags ?? []);
+  const [acknowledged, setAcknowledged] = useState(saved?.acknowledged ?? false);
+  const [minutesRun, setMinutesRun] = useState(saved?.minutesRun ?? '');
+  const [stopReason, setStopReason] = useState<StopReason | null>(saved?.stopReason ?? null);
   /** How the runner chose to give us their starting point. */
   const [baselineMode, setBaselineMode] = useState<'guided' | 'manual' | 'none' | null>(
-    restored.current?.baselineMode ?? null,
+    saved?.baselineMode ?? null,
   );
   /** Furthest step reached, so finished steps stay reachable from the stepper. */
-  const [furthest, setFurthest] = useState(restored.current?.furthest ?? 0);
+  const [furthest, setFurthest] = useState(saved?.furthest ?? 0);
   const [plan, setPlan] = useState<{ weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[]; reasons: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,11 +101,15 @@ export function Onboarding() {
   // blank form that would overwrite them.
   useEffect(() => {
     if (!profileData) return;
+    // Latching a fact about the server's answer the first time it arrives is
+    // exactly the external-system sync effects are for; the `was ??` keeps it
+    // to a single transition, so there is no cascade to avoid.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditingExisting((was) => was ?? Boolean(profileData.profile));
     if (restored.current) return;
     const server = profileData.profile;
     if (!server) return;
-    restored.current = {};
+    restored.current = true;
     const { userId: _userId, ...fields } = server as typeof server & { userId?: string };
     const prefilled = { ...EMPTY_PROFILE, ...fields };
     lastSaved.current = JSON.stringify(prefilled);

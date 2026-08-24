@@ -22,20 +22,28 @@ export function FoodLog() {
   const addEntry = useAddFoodEntry(date);
   const removeEntry = useRemoveFoodEntry(date);
 
-  const target = profile ? proteinTarget(profile.weightKg) : null;
+  // P3: with targets withdrawn, food still logs — it is simply not scored.
+  const targetsWithdrawn = Boolean(profileData?.settings?.targetsWithdrawnAt);
+  const target = profile && !targetsWithdrawn ? proteinTarget(profile.weightKg) : null;
   const total = nutrition?.proteinTotal ?? 0;
   const notes = profile ? DIETARY_NOTES[profile.dietaryPattern] : [];
 
   return (
     <div className="flex flex-col gap-5 pt-1">
       <header>
-        <Eyebrow>Protein today</Eyebrow>
-        <p className="mt-1 flex items-baseline gap-2">
-          <span className="tabular text-6xl leading-none" style={{ fontWeight: 800 }}>
-            {total}
-          </span>
-          {target && <span className="text-xl text-ink-soft">/ {target.targetG} g</span>}
-        </p>
+        <Eyebrow>{targetsWithdrawn ? 'Food today' : 'Protein today'}</Eyebrow>
+        {targetsWithdrawn ? (
+          <p className="mt-2 text-[1.0625rem] leading-snug">
+            Keep logging what you eat. Nothing is being counted against a target at the moment.
+          </p>
+        ) : (
+          <p className="mt-1 flex items-baseline gap-2">
+            <span className="tabular text-6xl leading-none" style={{ fontWeight: 800 }}>
+              {total}
+            </span>
+            {target && <span className="text-xl text-ink-soft">/ {target.targetG} g</span>}
+          </p>
+        )}
         {target && (
           <>
             <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-chalk-deep">
@@ -67,7 +75,9 @@ export function FoodLog() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="tabular font-semibold">{Math.round(entry.proteinG * entry.servings)}g</span>
+                  {!targetsWithdrawn && (
+                    <span className="tabular font-semibold">{Math.round(entry.proteinG * entry.servings)}g</span>
+                  )}
                   <button
                     onClick={() => removeEntry.mutate(entry.id)}
                     aria-label={`Remove ${entry.name}`}
@@ -91,7 +101,9 @@ export function FoodLog() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {!query && <p className="mt-2 text-[0.8125rem] text-ink-faint">Highest protein first. Search for anything else.</p>}
+        {!query && !targetsWithdrawn && (
+          <p className="mt-2 text-[0.8125rem] text-ink-faint">Highest protein first. Search for anything else.</p>
+        )}
         <ul className="mt-2.5 flex flex-col gap-1.5">
           {(query
             ? (foodData?.foods ?? []).slice(0, 40)
@@ -107,7 +119,7 @@ export function FoodLog() {
                   <span className="block truncate">{food.name}</span>
                   <span className="block text-[0.8125rem] text-ink-faint">{food.servingLabel}</span>
                 </span>
-                <span className="tabular shrink-0 font-semibold">{food.proteinG}g</span>
+                {!targetsWithdrawn && <span className="tabular shrink-0 font-semibold">{food.proteinG}g</span>}
               </button>
             </li>
           ))}
@@ -142,8 +154,9 @@ export function FoodLog() {
       )}
 
       <Note>
-        GoodForm tracks protein and nothing else. No calorie targets, no deficits — you are building tissue, and
-        that does not happen in a hole.
+        {targetsWithdrawn
+          ? 'GoodForm has never counted calories and is not counting anything at all right now. You can turn your protein target back on from Settings whenever you want it.'
+          : 'GoodForm tracks protein and nothing else. No calorie targets, no deficits — you are building tissue, and that does not happen in a hole.'}
       </Note>
     </div>
   );

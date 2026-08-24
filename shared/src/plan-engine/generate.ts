@@ -70,6 +70,33 @@ function makeWeek(
   };
 }
 
+/** A block that consolidates: the same week repeated, every fifth one lighter. */
+function maintenanceWeeks(runSec: number, walkSec: number, reps: number, count: number): PlanWeek[] {
+  const weeks: PlanWeek[] = [];
+  for (let i = 1; i <= count; i++) {
+    const deload = i % 5 === 0;
+    weeks.push(
+      deload
+        ? reps > 1
+          ? makeWeek(i, runSec, walkSec, Math.max(1, Math.round(reps * 0.6)), true)
+          : makeWeek(i, Math.max(60, roundTo(runSec * 0.6, 30)), walkSec, 1, true)
+        : makeWeek(i, runSec, walkSec, reps),
+    );
+  }
+  while (weeks.length > 1 && weeks[weeks.length - 1]!.isDeload) weeks.pop();
+  return weeks;
+}
+
+export interface PlanOptions {
+  /**
+   * Pick up from a block that was actually completed rather than from a fresh
+   * baseline. A baseline is one maximal effort, so the engine starts at half of
+   * it; a finished block's last prescription was already being repeated three
+   * times a week, and halving that would throw away the whole block.
+   */
+  continueFrom?: { runSec: number; walkSec: number; reps: number };
+}
+
 /**
  * PRD FR-2.1/2.2/2.4. Generates a 6–12 week run-walk block from the runner's
  * measured baseline. Run intervals lengthen while the walk stays constant;
@@ -79,15 +106,37 @@ export function generatePlan(
   profile: Profile,
   baseline: Baseline,
   startDate: string,
+  options: PlanOptions = {},
 ): Plan {
   const { score: conservatism, reasons } = assessConservatism(profile, baseline);
 
-  const walkSec = startingWalkSec(conservatism);
-  const runSec = startingRunSec(baseline, conservatism);
-  const reps = startingReps(runSec, conservatism);
+  const continued = options.continueFrom;
+  const walkSec = continued ? continued.walkSec : startingWalkSec(conservatism);
+  const runSec = continued ? continued.runSec : startingRunSec(baseline, conservatism);
+  const reps = continued ? continued.reps : startingReps(runSec, conservatism);
+  if (continued) {
+    reasons.unshift('This block starts where your last one finished, not from scratch.');
+  }
 
   const targetWeeks = clamp(BLOCK_LENGTH[profile.goal] + (conservatism >= 3 ? 2 : 0), 6, 12);
   const goalRunSec = GOAL_RUN_SEC[profile.goal];
+
+  // Continuing at or beyond the goal interval — "hold here", or another block
+  // at the same distance. The block maintains rather than builds: the same
+  // prescription, with the deload rhythm kept, because months of a distance
+  // being ordinary is what makes it stick.
+  if (continued && runSec >= goalRunSec) {
+    return {
+      goal: profile.goal,
+      conservatism,
+      conservatismReasons: [
+        'You are already at this block\'s distance, so it holds you there rather than pushing further.',
+        ...reasons.slice(1),
+      ],
+      startDate,
+      weeks: maintenanceWeeks(runSec, walkSec, reps, targetWeeks),
+    };
+  }
 
   const weeks: PlanWeek[] = [makeWeek(1, runSec, walkSec, reps)];
   let sinceDeload = 1;

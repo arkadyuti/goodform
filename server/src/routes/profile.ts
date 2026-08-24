@@ -33,6 +33,8 @@ const profileSchema = z.object({
   goal: z.enum(GOALS),
 });
 
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 const settingsSchema = z.object({
   audioMode: z.enum(['transient', 'playback']).optional(),
   soundEnabled: z.boolean().optional(),
@@ -44,6 +46,21 @@ const settingsSchema = z.object({
   alcoholBaselinePerWeek: z.number().min(0).max(200).nullish(),
   alcoholUnitCost: z.number().min(0).nullish(),
   currency: z.string().max(8).optional(),
+
+  // Reminders (P3, P3.1)
+  timezone: z.string().max(64).optional(),
+  remindersEnabled: z.boolean().optional(),
+  regimenReminders: z.boolean().optional(),
+  sessionReminders: z.boolean().optional(),
+  weeklyCheckReminders: z.boolean().optional(),
+  weeklyCheckDay: z.number().int().min(0).max(6).optional(),
+  weeklyCheckTime: z.string().regex(TIME).optional(),
+  quietHoursStart: z.string().regex(TIME).optional(),
+  quietHoursEnd: z.string().regex(TIME).optional(),
+  hideNamesInNotifications: z.boolean().optional(),
+  medicineEscalation: z.boolean().optional(),
+  sessionTime: z.string().regex(TIME).optional(),
+  fuellingTips: z.boolean().optional(),
 });
 
 export const profileRoutes = new Hono<AppEnv>()
@@ -84,6 +101,19 @@ export const profileRoutes = new Hono<AppEnv>()
       .insert(schema.settings)
       .values(values)
       .onConflictDoUpdate({ target: schema.settings.userId, set: values });
+    return c.json({ ok: true });
+  })
+
+  /**
+   * P3: brings the numeric targets back after the guardrails put them away.
+   * Only the user can do this, and doing it stops the sweep from taking them
+   * again — the alternative is an app that argues with somebody every week.
+   */
+  .post('/restore-targets', async (c) => {
+    await db
+      .update(schema.settings)
+      .set({ targetsWithdrawnAt: null, targetsRestoredAt: new Date(), guardrailSignals: [], updatedAt: new Date() })
+      .where(eq(schema.settings.userId, c.get('userId')));
     return c.json({ ok: true });
   })
 

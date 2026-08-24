@@ -92,6 +92,19 @@ export const sessionRoutes = new Hono<AppEnv>()
     return c.json({ ok: true, id: s.id });
   })
 
+  /** Removes a mislogged session. Backfilling is only safe if it is reversible. */
+  .delete('/:id', async (c) => {
+    await db
+      .delete(schema.workoutSessions)
+      .where(
+        and(
+          eq(schema.workoutSessions.userId, c.get('userId')),
+          eq(schema.workoutSessions.id, c.req.param('id')),
+        ),
+      );
+    return c.json({ ok: true });
+  })
+
   .get('/strength-progress', async (c) => {
     const rows = await db
       .select()

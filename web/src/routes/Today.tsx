@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { daysClear, proteinTarget } from '@goodform/shared';
+import { WITHDRAWAL_MESSAGE, daysClear, proteinTarget, startOfWeek } from '@goodform/shared';
 import {
   emptyLog,
+  type SessionRow,
   useDailyLog,
   useDailyRange,
   useNutrition,
@@ -15,6 +16,8 @@ import {
 } from '../api/hooks.ts';
 import { dayName, scheduleFor, shiftDays, today } from '../lib/date.ts';
 import { Button, Card, Eyebrow, Note, Stepper } from '../components/ui.tsx';
+import { DueNow } from '../components/DueNow.tsx';
+import { Fuelling } from '../components/Fuelling.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
 import { WeeklyCheckIn } from '../components/WeeklyCheckIn.tsx';
 import { WeekStrip } from '../components/WeekStrip.tsx';
@@ -28,7 +31,10 @@ export function Today() {
   const { data: nutritionData, isPending: nutritionPending } = useNutrition(date);
   const { data: sessionData, isPending: sessionsPending } = useSessions(shiftDays(date, -7));
   const { data: rangeData, isPending: rangePending } = useDailyRange(shiftDays(date, -30));
-  const { isPending: reviewPending } = useWeekReview(planData?.plan?.status === 'active');
+  // `isLoading`, not `isPending`: a disabled query stays 'pending' forever, so
+  // gating the screen on `isPending` blanked all of Today the moment the plan
+  // stopped being active.
+  const { isLoading: reviewPending } = useWeekReview(planData?.plan?.status === 'active');
   const saveLog = useSaveDailyLog(date);
 
   const profile = profileData?.profile;
@@ -42,7 +48,10 @@ export function Today() {
   const runDone = doneToday.some((s) => s.type === 'run' || s.type === 'baseline');
   const strengthDone = doneToday.some((s) => s.type === 'strength');
 
-  const protein = profile ? proteinTarget(profile.weightKg) : null;
+  // P3: when the guardrails have put the numbers away, they stay away —
+  // including here, where the dial is the most insistent of them.
+  const targetsWithdrawn = Boolean(settings?.targetsWithdrawnAt);
+  const protein = profile && !targetsWithdrawn ? proteinTarget(profile.weightKg) : null;
   const proteinTotal = nutritionData?.proteinTotal ?? 0;
 
   const tracked = settings?.trackedHabits ?? ['water', 'sleep', 'beer', 'alcohol', 'cigarettes'];
@@ -61,12 +70,20 @@ export function Today() {
         <div className="mt-4">
           <WeekStrip sessions={sessionData?.sessions ?? []} />
         </div>
+        <Link
+          to="/calendar"
+          className="mt-2 inline-block text-[0.8125rem] text-run underline underline-offset-4"
+        >
+          Calendar — fill in a day you missed
+        </Link>
       </header>
 
       {!ready && <div className="min-h-[60dvh]" aria-busy="true" aria-label="Loading today" />}
 
       {ready && plan && plan.status === 'paused' && <PausedBanner reason={plan.pausedReason} />}
+      {ready && plan && plan.status === 'completed' && <BlockCompleteBanner />}
       {ready && <WeekGate hasPlan={plan?.status === 'active'} />}
+      {ready && targetsWithdrawn && <GuardrailNotice signals={settings?.guardrailSignals ?? []} />}
 
 
       {/* --- Today's session -------------------------------------------- */}
@@ -116,16 +133,23 @@ export function Today() {
         </Card>
       )}
 
+      {ready && scheduled !== 'rest' && plan?.status === 'active' && profile && settings?.fuellingTips && (
+        <Fuelling
+          sessionTime={settings.sessionTime}
+          sessionType={scheduled}
+          dietaryPattern={profile.dietaryPattern}
+          sessionDone={scheduled === 'run' ? runDone : strengthDone}
+        />
+      )}
+
+      {ready && <DueNow />}
+
       {ready && scheduled === 'rest' && (
-        <Card>
-          <Eyebrow>Rest day</Eyebrow>
-          <p className="mt-2 text-[1.0625rem] leading-snug">
-            Nothing scheduled. Adaptation happens now, not during the run.
-          </p>
-          <Link to="/plan" className="mt-3 inline-block text-[0.875rem] text-run underline underline-offset-4">
-            See the week ahead
-          </Link>
-        </Card>
+        <RestDay
+          hasPlan={plan?.status === 'active'}
+          sessions={sessionData?.sessions ?? []}
+          onRun={() => navigate('/session/run')}
+        />
       )}
 
       {ready && !plan && (
@@ -139,6 +163,21 @@ export function Today() {
       )}
 
       {/* --- Protein ------------------------------------------------------ */}
+      {ready && targetsWithdrawn && (
+        <Card>
+          <Eyebrow>Food</Eyebrow>
+          <p className="mt-2 leading-snug">
+            Logging still works. There is just no number attached to it at the moment.
+          </p>
+          <Link
+            to="/food"
+            className="tap mt-3 flex items-center justify-center rounded-xl border border-line bg-chalk text-[0.9375rem] font-medium transition-colors hover:border-ink-faint"
+          >
+            Log food
+          </Link>
+        </Card>
+      )}
+
       {ready && protein && (
         <Card>
           <div className="flex items-center justify-between gap-4">
@@ -280,6 +319,119 @@ function ProteinDial({ value, target }: { value: number; target: number }) {
   );
 }
 
+/**
+ * Rest days are a recommendation, not a lock. The plan advises and the runner
+ * decides — the same rule the weekly gate follows — so the card keeps rest as
+ * the headline and puts running behind one tap and one honest sentence.
+ *
+ * The warning is specific rather than generic: what actually hurts beginners is
+ * running on consecutive days and adding volume, not the day's name.
+ */
+function RestDay({
+  hasPlan,
+  sessions,
+  onRun,
+}: {
+  hasPlan: boolean;
+  sessions: SessionRow[];
+  onRun: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  const date = today();
+
+  const runs = sessions.filter((s) => (s.type === 'run' || s.type === 'baseline') && s.completion !== 'skipped');
+  const ranYesterday = runs.some((s) => s.date === shiftDays(date, -1));
+  const weekStart = startOfWeek(date);
+  const runsThisWeek = runs.filter((s) => s.date >= weekStart && s.date <= date).length;
+
+  const caution = ranYesterday
+    ? 'You ran yesterday. Back-to-back running days are where beginners actually get hurt — the load lands on tissue that has not finished repairing from the last one.'
+    : runsThisWeek >= 3
+      ? `That would be your fourth run this week. Weekly running time is meant to grow by no more than a tenth, and a fourth session is a much bigger jump than that.`
+      : 'Fine — a rest day moved is not a rest day skipped. Try to keep a clear day either side of it.';
+
+  return (
+    <Card>
+      <Eyebrow>Rest day</Eyebrow>
+      <p className="mt-2 text-[1.0625rem] leading-snug">
+        Nothing scheduled. Adaptation happens now, not during the run.
+      </p>
+
+      {hasPlan &&
+        (asking ? (
+          <div className="mt-3">
+            <Note tone={ranYesterday || runsThisWeek >= 3 ? 'alert' : 'neutral'}>{caution}</Note>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button onClick={onRun}>Run it anyway</Button>
+              <Button variant="quiet" onClick={() => setAsking(false)}>
+                Leave it
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="secondary" className="mt-3" onClick={() => setAsking(true)}>
+            Run today instead
+          </Button>
+        ))}
+
+      <Link to="/plan" className="mt-3 block text-[0.875rem] text-run underline underline-offset-4">
+        See the week ahead
+      </Link>
+    </Card>
+  );
+}
+
+/** P3: a finished block is an event, not a dead end. */
+function BlockCompleteBanner() {
+  return (
+    <Card className="border-ink">
+      <Eyebrow>Block complete</Eyebrow>
+      <p className="mt-1.5 text-[1.0625rem] leading-snug">
+        You finished the block. What comes next is worth a minute's thought rather than an automatic next week.
+      </p>
+      <Link
+        to="/reassess"
+        className="tap mt-3 flex items-center justify-center rounded-xl bg-ink px-5 font-medium text-chalk transition-colors hover:bg-ink/90"
+      >
+        See what you did, and choose
+      </Link>
+    </Card>
+  );
+}
+
+/**
+ * P3: the numeric targets have been withdrawn. This says so plainly, once, and
+ * offers a way back — it does not diagnose anybody and it does not argue.
+ */
+function GuardrailNotice({ signals }: { signals: { id: string; label: string; detail: string }[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card className="border-walk bg-walk-wash">
+      <Eyebrow className="!text-walk-deep">A change to what is shown</Eyebrow>
+      <p className="mt-1.5 leading-relaxed">{WITHDRAWAL_MESSAGE}</p>
+      {signals.length > 0 && (
+        <>
+          <Button variant="secondary" className="mt-3" onClick={() => setOpen((v) => !v)}>
+            {open ? 'Hide the reason' : 'Why'}
+          </Button>
+          {open && (
+            <ul className="mt-3 flex flex-col gap-2.5">
+              {signals.map((signal) => (
+                <li key={signal.id}>
+                  <p className="text-[0.9375rem]" style={{ fontWeight: 600 }}>
+                    {signal.label}
+                  </p>
+                  <p className="text-[0.875rem] leading-relaxed text-ink-soft">{signal.detail}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function PausedBanner({ reason }: { reason: string | null }) {
   const decide = useWeekDecision();
   return (
@@ -293,21 +445,51 @@ function PausedBanner({ reason }: { reason: string | null }) {
   );
 }
 
-/** Surfaces the week's gate decision on the home screen, where it gets seen. */
+/**
+ * The end-of-week decision, surfaced where it gets seen.
+ *
+ * Two rules govern *when* it appears, because getting that wrong made the card
+ * nonsense. The gate judges a whole week, so an attendance verdict asked for on
+ * a Wednesday always reads "sessions missed" — those wait until the week is
+ * actually over. A discomfort verdict is a safety signal and does not wait.
+ */
 function WeekGate({ hasPlan }: { hasPlan: boolean }) {
-  const { data, isPending } = useWeekReview(hasPlan);
+  const { data, isLoading } = useWeekReview(hasPlan);
   const decide = useWeekDecision();
   const [showRisk, setShowRisk] = useState(false);
 
-  if (!data || isPending || data.gate.decision === 'advance') return null;
+  if (!data || isLoading) return null;
 
   const gate = data.gate;
+  const discomfortDriven =
+    gate.decision === 'pause_medical' || (gate.decision === 'repeat' && gate.strengthEmphasis);
+  if (!discomfortDriven && !data.weekOver) return null;
+
+  // A week finished cleanly. Without this the plan simply never moved on: the
+  // only control that advanced it was the override, which is why being told to
+  // "move to next week anyway" after a good week made no sense.
+  if (gate.decision === 'advance') {
+    return (
+      <Card className="border-good">
+        <Eyebrow className="!text-good">Week done</Eyebrow>
+        <p className="mt-1.5 text-[1.0625rem] leading-snug">{gate.reason}</p>
+        <Button full className="mt-3.5" onClick={() => decide.mutate({ action: 'advance' })}>
+          Start next week
+        </Button>
+      </Card>
+    );
+  }
+
   const tone = gate.decision === 'pause_medical' ? 'alert' : 'neutral';
 
   return (
     <Card className={tone === 'alert' ? 'border-alert bg-alert-wash' : 'border-walk bg-walk-wash'}>
       <Eyebrow className={tone === 'alert' ? '!text-alert' : '!text-walk-deep'}>
-        {gate.decision === 'pause_medical' ? 'Stop and check' : 'End of week'}
+        {gate.decision === 'pause_medical'
+          ? 'Stop and check'
+          : discomfortDriven
+            ? 'Worth easing off'
+            : 'End of week'}
       </Eyebrow>
       <p className="mt-1.5 leading-snug">{gate.reason}</p>
       <div className="mt-3.5 flex flex-wrap gap-2">
@@ -316,7 +498,9 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
             Pause my plan
           </Button>
         ) : (
-          <Button onClick={() => decide.mutate({ action: 'repeat' })}>Repeat this week</Button>
+          <Button onClick={() => decide.mutate({ action: 'repeat' })}>
+            {data.weekOver ? 'Repeat this week' : 'Repeat it rather than move on'}
+          </Button>
         )}
         {gate.decision === 'step_back' && (
           <Button variant="secondary" onClick={() => decide.mutate({ action: 'step_back' })}>
@@ -324,8 +508,11 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
           </Button>
         )}
         {gate.overridable && (
-          <Button variant="secondary" onClick={() => (showRisk ? decide.mutate({ action: 'advance', override: true }) : setShowRisk(true))}>
-            {showRisk ? 'Yes, move to next week' : 'Move to next week anyway'}
+          <Button
+            variant="secondary"
+            onClick={() => (showRisk ? decide.mutate({ action: 'advance', override: true }) : setShowRisk(true))}
+          >
+            {showRisk ? 'Yes, move on anyway' : 'Move on to week ' + (data.week.index + 1)}
           </Button>
         )}
       </div>

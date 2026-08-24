@@ -1,16 +1,22 @@
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
+  GOALS,
   STOP_REASONS,
+  daysBetween,
   evaluateWeek,
   generatePlan,
+  needsFreshBaseline,
+  nextGoalOptions,
   returnFromBreak,
+  summariseBlock,
+  type Goal,
   type Profile,
   type WorkoutSession,
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
-import { requireAuth, type AppEnv } from '../middleware.js';
+import { requireAuth, todayFrom, type AppEnv } from '../middleware.js';
 
 function toProfile(row: typeof schema.profiles.$inferSelect): Profile {
   return {
@@ -80,10 +86,28 @@ function weekRange(startDate: string, weekIndex: number, repeatsBefore: number) 
 export const planRoutes = new Hono<AppEnv>()
   .use('*', requireAuth)
 
+  /**
+   * The plan the client should be looking at. Not `activePlan`: a block that
+   * has been finished still has to reach the screen, or the runner is told
+   * nothing at all rather than that they completed it. Abandoned plans are
+   * replaced ones and stay hidden.
+   */
   .get('/', async (c) => {
-    const current = await activePlan(c.get('userId'));
-    if (!current) return c.json({ plan: null, weeks: [] });
-    return c.json({ plan: current.plan, weeks: current.weeks });
+    const userId = c.get('userId');
+    const [plan] = await db
+      .select()
+      .from(schema.plans)
+      .where(and(eq(schema.plans.userId, userId), ne(schema.plans.status, 'abandoned')))
+      .orderBy(desc(schema.plans.createdAt))
+      .limit(1);
+    if (!plan) return c.json({ plan: null, weeks: [] });
+
+    const weeks = await db
+      .select()
+      .from(schema.planWeeks)
+      .where(eq(schema.planWeeks.planId, plan.id))
+      .orderBy(schema.planWeeks.index);
+    return c.json({ plan, weeks });
   })
 
   .post('/baseline', async (c) => {
@@ -199,7 +223,20 @@ export const planRoutes = new Hono<AppEnv>()
       { ...week, isDeload: week.isDeload, sessionsPerWeek: week.sessionsPerWeek },
       rows.map(toSession),
     );
-    return c.json({ gate, week, range: { from, to }, sessions: rows.map(toSession) });
+
+    // The gate judges a *whole* week. Asked on a Wednesday it will always
+    // report missed sessions, because the rest of the week has not happened
+    // yet — so the client needs to know whether the week is actually over
+    // before it repeats any of that back to the runner.
+    const today = todayFrom(c);
+    return c.json({
+      gate,
+      week,
+      range: { from, to },
+      weekOver: today > to,
+      daysLeft: Math.max(0, daysBetween(today, to)),
+      sessions: rows.map(toSession),
+    });
   })
 
   /** FR-3.3: the runner decides. Overrides are recorded, never blocked. */
@@ -259,6 +296,178 @@ export const planRoutes = new Hono<AppEnv>()
         return c.json({ status: 'active' });
       }
     }
+  })
+
+  /**
+   * P3: what the block just finished actually delivered, and what could come
+   * next. Read-only — nothing changes until the runner picks something.
+   */
+  .get('/block-outcome', async (c) => {
+    const userId = c.get('userId');
+    const [plan] = await db
+      .select()
+      .from(schema.plans)
+      .where(eq(schema.plans.userId, userId))
+      .orderBy(desc(schema.plans.createdAt))
+      .limit(1);
+    if (!plan) return c.json({ error: 'No plan yet' }, 404);
+
+    const weeks = await db
+      .select()
+      .from(schema.planWeeks)
+      .where(eq(schema.planWeeks.planId, plan.id))
+      .orderBy(schema.planWeeks.index);
+
+    // Filtered by date rather than plan id: only one plan is active at a time,
+    // and a session logged offline before the column existed still counts.
+    const sessions = await db
+      .select()
+      .from(schema.workoutSessions)
+      .where(and(eq(schema.workoutSessions.userId, userId), gte(schema.workoutSessions.date, plan.startDate)));
+
+    const outcome = summariseBlock(
+      { goal: plan.goal as Goal, currentWeek: plan.currentWeek },
+      weeks,
+      sessions.map(toSession),
+    );
+
+    const [latestRun] = await db
+      .select({ date: schema.workoutSessions.date })
+      .from(schema.workoutSessions)
+      .where(eq(schema.workoutSessions.userId, userId))
+      .orderBy(desc(schema.workoutSessions.date))
+      .limit(1);
+    const daysSinceLastRun = latestRun
+      ? daysBetween(latestRun.date, new Date().toISOString().slice(0, 10))
+      : Infinity;
+
+    return c.json({
+      plan,
+      outcome,
+      options: nextGoalOptions(outcome),
+      needsBaseline: needsFreshBaseline(outcome, daysSinceLastRun),
+      daysSinceLastRun: Number.isFinite(daysSinceLastRun) ? daysSinceLastRun : null,
+    });
+  })
+
+  /**
+   * P3: starts the next block. Continues from what the finished block reached
+   * unless a fresh baseline was recorded, in which case that wins — someone
+   * coming back after months is not the runner the old block described.
+   */
+  .post('/reassess', async (c) => {
+    const userId = c.get('userId');
+    const parsed = z
+      .object({
+        goal: z.enum(GOALS),
+        startDate: z.string().optional(),
+        /** A fresh timed run, when the block is too old to continue from. */
+        baseline: z
+          .object({ minutesRun: z.number().min(0).max(120), stopReason: z.enum(STOP_REASONS) })
+          .nullish(),
+      })
+      .safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: 'Invalid reassessment', issues: parsed.error.issues }, 400);
+
+    const [profileRow] = await db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId));
+    if (!profileRow) return c.json({ error: 'Complete your profile first' }, 400);
+
+    const [previous] = await db
+      .select()
+      .from(schema.plans)
+      .where(eq(schema.plans.userId, userId))
+      .orderBy(desc(schema.plans.createdAt))
+      .limit(1);
+
+    let continueFrom: { runSec: number; walkSec: number; reps: number } | undefined;
+    if (previous && !parsed.data.baseline) {
+      const weeks = await db
+        .select()
+        .from(schema.planWeeks)
+        .where(eq(schema.planWeeks.planId, previous.id))
+        .orderBy(schema.planWeeks.index);
+      const sessions = await db
+        .select()
+        .from(schema.workoutSessions)
+        .where(and(eq(schema.workoutSessions.userId, userId), gte(schema.workoutSessions.date, previous.startDate)));
+      continueFrom =
+        summariseBlock({ goal: previous.goal as Goal, currentWeek: previous.currentWeek }, weeks, sessions.map(toSession))
+          .continueFrom ?? undefined;
+    }
+
+    // A new goal is a change to the profile, not just to this block.
+    if (parsed.data.goal !== profileRow.goal) {
+      await db
+        .update(schema.profiles)
+        .set({ goal: parsed.data.goal, updatedAt: new Date() })
+        .where(eq(schema.profiles.userId, userId));
+    }
+
+    const baselineRow = parsed.data.baseline
+      ? (
+          await db
+            .insert(schema.baselines)
+            .values({
+              userId,
+              minutesRun: parsed.data.baseline.minutesRun,
+              stopReason: parsed.data.baseline.stopReason,
+            })
+            .returning()
+        )[0]!
+      : (
+          await db
+            .select()
+            .from(schema.baselines)
+            .where(eq(schema.baselines.userId, userId))
+            .orderBy(desc(schema.baselines.recordedAt))
+            .limit(1)
+        )[0];
+
+    if (!baselineRow) return c.json({ error: 'Record a baseline assessment first' }, 400);
+
+    const startDate = parsed.data.startDate ?? new Date().toISOString().slice(0, 10);
+    const generated = generatePlan(
+      { ...toProfile(profileRow), goal: parsed.data.goal },
+      {
+        minutesRun: baselineRow.minutesRun,
+        stopReason: baselineRow.stopReason as 'breath' | 'legs' | 'choice',
+        recordedAt: baselineRow.recordedAt.toISOString(),
+      },
+      startDate,
+      continueFrom ? { continueFrom } : {},
+    );
+
+    // The block that just ended is finished, not abandoned — it is the record
+    // of what was actually done.
+    if (previous && previous.status === 'active') {
+      await db.update(schema.plans).set({ status: 'completed' }).where(eq(schema.plans.id, previous.id));
+    }
+
+    const [plan] = await db
+      .insert(schema.plans)
+      .values({
+        userId,
+        goal: generated.goal,
+        conservatism: generated.conservatism,
+        conservatismReasons: generated.conservatismReasons,
+        startDate,
+      })
+      .returning();
+
+    await db.insert(schema.planWeeks).values(
+      generated.weeks.map((w) => ({
+        planId: plan!.id,
+        index: w.index,
+        runSec: w.runSec,
+        walkSec: w.walkSec,
+        reps: w.reps,
+        sessionsPerWeek: w.sessionsPerWeek,
+        isDeload: w.isDeload,
+        totalRunSec: w.totalRunSec,
+      })),
+    );
+
+    return c.json({ plan, weeks: generated.weeks });
   })
 
   /** FR-3.5: applies a proportional step-back after a gap in training. */

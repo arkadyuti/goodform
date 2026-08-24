@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { usePlan, useSessions, useWeekReview } from '../api/hooks.ts';
 import { shiftDays, today } from '../lib/date.ts';
 import { Card, Eyebrow, Note } from '../components/ui.tsx';
@@ -6,7 +7,8 @@ import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
 export function PlanView() {
   const { data } = usePlan();
   const { data: sessionData } = useSessions(shiftDays(today(), -120));
-  const { data: review } = useWeekReview(Boolean(data?.plan));
+  // A finished block has no week left to gate on, so asking would only 404.
+  const { data: review } = useWeekReview(data?.plan?.status === 'active');
 
   const plan = data?.plan;
   const weeks = data?.weeks ?? [];
@@ -35,7 +37,9 @@ export function PlanView() {
       <header>
         <Eyebrow>Your block</Eyebrow>
         <h1 className="mt-1 text-4xl" style={{ fontWeight: 780 }}>
-          Week {plan.currentWeek} of {weeks.length}
+          {plan.status === 'completed'
+            ? `${weeks.length} weeks, done`
+            : `Week ${Math.min(plan.currentWeek, weeks.length)} of ${weeks.length}`}
         </h1>
         <p className="mt-2 leading-relaxed text-ink-soft">
           Cobalt is running, amber is walking, drawn to scale. Watch the run blocks stretch while the walks stay
@@ -43,7 +47,22 @@ export function PlanView() {
         </p>
       </header>
 
-      {currentWeek && (
+      {plan.status === 'completed' && (
+        <Card className="border-ink">
+          <Eyebrow>Block complete</Eyebrow>
+          <p className="mt-1.5 text-[1.0625rem] leading-snug">
+            You finished this block. The next one starts from where it left off rather than from scratch.
+          </p>
+          <Link
+            to="/reassess"
+            className="tap mt-3 flex items-center justify-center rounded-xl bg-ink px-5 font-medium text-chalk transition-colors hover:bg-ink/90"
+          >
+            See what you did, and choose
+          </Link>
+        </Card>
+      )}
+
+      {plan.status === 'active' && currentWeek && (
         <Card className="border-ink">
           <div className="flex items-baseline justify-between">
             <Eyebrow>This week</Eyebrow>
@@ -83,7 +102,11 @@ export function PlanView() {
       <ol className="flex flex-col gap-3">
         {weeks.map((week) => {
           const state =
-            week.index < plan.currentWeek ? 'done' : week.index === plan.currentWeek ? 'current' : 'ahead';
+            plan.status === 'completed' || week.index < plan.currentWeek
+              ? 'done'
+              : week.index === plan.currentWeek
+                ? 'current'
+                : 'ahead';
           return (
             <li
               key={week.index}
