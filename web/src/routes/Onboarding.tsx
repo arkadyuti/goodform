@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Profile, ScreeningFlag, StopReason } from '@goodform/shared';
 import { proteinTarget } from '@goodform/shared';
 import {
   useGeneratePlan,
+  useProfile,
   useSaveBaseline,
   useSaveProfile,
   useSaveScreening,
 } from '../api/hooks.ts';
+import { clearDraft, loadDraft, saveDraft } from '../lib/onboardingDraft.ts';
 import { Button, Choices, Eyebrow, Field, Note, TextInput } from '../components/ui.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
 import { BaselineRun, StopReasonChoice } from '../components/BaselineRun.tsx';
@@ -24,6 +26,38 @@ const SCREENING_QUESTIONS: { flag: ScreeningFlag; question: string }[] = [
 
 type Step = 'about' | 'body' | 'habits' | 'history' | 'goal' | 'screening' | 'baseline' | 'reveal';
 const ORDER: Step[] = ['about', 'body', 'habits', 'history', 'goal', 'screening', 'baseline', 'reveal'];
+const STEP_NAMES: Record<Step, string> = {
+  about: 'About you',
+  body: 'Body',
+  habits: 'Where you are',
+  history: 'Injuries',
+  goal: 'Goal',
+  screening: 'Health check',
+  baseline: 'Starting point',
+  reveal: 'Your plan',
+};
+
+const EMPTY_PROFILE: Partial<Profile> = {
+  units: 'metric',
+  exclusions: [],
+  injuryHistory: [],
+  equipment: ['none'],
+  alcoholFrequency: 'never',
+};
+
+/** True once every field the plan generator needs has an answer. */
+function isComplete(draft: Partial<Profile>): draft is Profile {
+  return Boolean(
+    draft.age &&
+      draft.sexAtBirth &&
+      draft.heightCm &&
+      draft.weightKg &&
+      draft.dietaryPattern &&
+      draft.activityLevel &&
+      draft.smokingStatus &&
+      draft.goal,
+  );
+}
 
 export function Onboarding() {
   const navigate = useNavigate();
@@ -32,34 +66,89 @@ export function Onboarding() {
   const saveBaseline = useSaveBaseline();
   const generatePlan = useGeneratePlan();
 
-  const [step, setStep] = useState<Step>('about');
-  const [draft, setDraft] = useState<Partial<Profile>>({
-    units: 'metric',
-    exclusions: [],
-    injuryHistory: [],
-    equipment: ['none'],
-    alcoholFrequency: 'never',
-  });
-  const [flags, setFlags] = useState<ScreeningFlag[]>([]);
-  const [acknowledged, setAcknowledged] = useState(false);
-  const [minutesRun, setMinutesRun] = useState('');
-  const [stopReason, setStopReason] = useState<StopReason | null>(null);
+  const { data: profileData } = useProfile();
+  const restored = useRef(loadDraft());
+  const lastSaved = useRef<string | null>(null);
+  /** Whether a profile already existed when this screen opened. */
+  const [editingExisting, setEditingExisting] = useState<boolean | null>(null);
+
+  const [step, setStep] = useState<Step>((restored.current?.step as Step) ?? 'about');
+  const [draft, setDraft] = useState<Partial<Profile>>(restored.current?.profile ?? EMPTY_PROFILE);
+  const [flags, setFlags] = useState<ScreeningFlag[]>(restored.current?.flags ?? []);
+  const [acknowledged, setAcknowledged] = useState(restored.current?.acknowledged ?? false);
+  const [minutesRun, setMinutesRun] = useState(restored.current?.minutesRun ?? '');
+  const [stopReason, setStopReason] = useState<StopReason | null>(restored.current?.stopReason ?? null);
   /** How the runner chose to give us their starting point. */
-  const [baselineMode, setBaselineMode] = useState<'guided' | 'manual' | 'none' | null>(null);
+  const [baselineMode, setBaselineMode] = useState<'guided' | 'manual' | 'none' | null>(
+    restored.current?.baselineMode ?? null,
+  );
+  /** Furthest step reached, so finished steps stay reachable from the stepper. */
+  const [furthest, setFurthest] = useState(restored.current?.furthest ?? 0);
   const [plan, setPlan] = useState<{ weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[]; reasons: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const stepIndex = ORDER.indexOf(step);
+
+  // Someone editing an existing profile must see their current answers, not a
+  // blank form that would overwrite them.
+  useEffect(() => {
+    if (!profileData) return;
+    setEditingExisting((was) => was ?? Boolean(profileData.profile));
+    if (restored.current) return;
+    const server = profileData.profile;
+    if (!server) return;
+    restored.current = {};
+    const { userId: _userId, ...fields } = server as typeof server & { userId?: string };
+    const prefilled = { ...EMPTY_PROFILE, ...fields };
+    lastSaved.current = JSON.stringify(prefilled);
+    setDraft(prefilled);
+    setFurthest(ORDER.length - 2);
+  }, [profileData]);
+
+  useEffect(() => {
+    if (step === 'reveal') return;
+    saveDraft({ step, furthest, profile: draft, flags, acknowledged, minutesRun, stopReason, baselineMode });
+  }, [step, furthest, draft, flags, acknowledged, minutesRun, stopReason, baselineMode]);
+
   const set = <K extends keyof Profile>(key: K, value: Profile[K]) => setDraft((d) => ({ ...d, [key]: value }));
+
   const go = (next: Step) => {
     setError(null);
     setStep(next);
+    setFurthest((f) => Math.max(f, ORDER.indexOf(next)));
     window.scrollTo({ top: 0 });
   };
 
+  /** Saves the profile if it is complete and has actually changed. */
+  const persistIfChanged = async () => {
+    if (!isComplete(draft)) return;
+    const serialised = JSON.stringify(draft);
+    if (serialised === lastSaved.current) return;
+    await saveProfile.mutateAsync(draft);
+    lastSaved.current = serialised;
+  };
+
+  /**
+   * Jumping between finished steps must not lose an edit made on the way, so
+   * a changed profile is saved whenever the wizard is navigated.
+   */
+  const jumpTo = (target: Step) => {
+    void persistIfChanged();
+    go(target);
+  };
+
+  /**
+   * Editing an existing profile should not drag anyone back through the
+   * baseline — regenerating a plan would throw away the one they are on.
+   */
+  const saveAndClose = async () => {
+    await persistIfChanged();
+    clearDraft();
+    navigate('/');
+  };
+
   const finishProfile = async () => {
-    const complete = draft as Profile;
-    await saveProfile.mutateAsync(complete);
+    await persistIfChanged();
     go('screening');
   };
 
@@ -79,6 +168,7 @@ export function Onboarding() {
         weeks: { index: number; runSec: number; walkSec: number; reps: number; isDeload: boolean }[];
       };
       setPlan({ weeks: result.weeks, reasons: result.plan.conservatismReasons });
+      clearDraft();
       go('reveal');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not build your plan.');
@@ -94,22 +184,56 @@ export function Onboarding() {
               <span className="h-full flex-[3] bg-run" />
               <span className="h-full flex-[1] bg-walk" />
             </span>
-            {stepIndex > 0 && (
-              <button
-                onClick={() => go(ORDER[stepIndex - 1]!)}
-                className="tap px-2 text-[0.875rem] text-ink-faint hover:text-ink"
-              >
-                Back
-              </button>
-            )}
+            <span className="flex items-center gap-1">
+              {stepIndex > 0 && (
+                <button
+                  onClick={() => jumpTo(ORDER[stepIndex - 1]!)}
+                  className="tap px-2 text-[0.875rem] text-ink-faint hover:text-ink"
+                >
+                  Back
+                </button>
+              )}
+              {editingExisting && (
+                <button
+                  onClick={saveAndClose}
+                  disabled={saveProfile.isPending}
+                  className="tap rounded-lg px-3 text-[0.875rem] font-semibold text-run hover:bg-run-wash"
+                >
+                  Save and close
+                </button>
+              )}
+            </span>
           </div>
-          <div className="mb-3 flex gap-1" aria-hidden>
-            {ORDER.slice(0, -1).map((s, i) => (
-              <span key={s} className={`h-1 flex-1 rounded-full ${i <= stepIndex ? 'bg-ink' : 'bg-line'}`} />
-            ))}
-          </div>
+          {/* Finished steps stay reachable — answers are kept, so going back
+              to change one costs nothing. */}
+          <nav className="mb-3 flex gap-1" aria-label="Setup steps">
+            {ORDER.slice(0, -1).map((s, i) => {
+              const reachable = i <= furthest;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={!reachable}
+                  aria-current={i === stepIndex ? 'step' : undefined}
+                  aria-label={`Step ${i + 1} of ${ORDER.length - 1}: ${STEP_NAMES[s]}${reachable ? '' : ' (not yet reached)'}`}
+                  onClick={() => jumpTo(s)}
+                  className="group flex-1 py-2 disabled:cursor-not-allowed"
+                >
+                  <span
+                    className={`block h-1 rounded-full transition-colors ${
+                      i === stepIndex
+                        ? 'bg-ink'
+                        : reachable
+                          ? 'bg-ink/35 group-hover:bg-ink/60'
+                          : 'bg-line'
+                    }`}
+                  />
+                </button>
+              );
+            })}
+          </nav>
           <Eyebrow>
-            Step {stepIndex + 1} of {ORDER.length - 1}
+            Step {stepIndex + 1} of {ORDER.length - 1} · {STEP_NAMES[step]}
           </Eyebrow>
         </div>
       )}
@@ -523,7 +647,14 @@ export function Onboarding() {
             repeat rather than progress are the plan working, not you failing.
           </Note>
 
-          <Button full className="mt-6 py-3.5" onClick={() => navigate('/')}>
+          <Button
+            full
+            className="mt-6 py-3.5"
+            onClick={() => {
+              clearDraft();
+              navigate('/');
+            }}
+          >
             Start
           </Button>
         </div>
