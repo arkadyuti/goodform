@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auth } from './auth.js';
+import { pool } from './db/index.js';
 import { env, googleEnabled } from './env.js';
 import { accountDeleteRoutes, accountRoutes } from './routes/account.js';
 import { logRoutes, nutritionRoutes } from './routes/logs.js';
@@ -32,7 +33,22 @@ app.use(
 
 // Which sign-in methods the client should offer.
 app.get('/api/config', (c) => c.json({ google: googleEnabled, devLogin: env.devLogin }));
-app.get('/api/health', (c) => c.json({ ok: true }));
+/**
+ * Liveness plus a real dependency check.
+ *
+ * The deploy pipeline gates a release on this endpoint and rolls back if it
+ * does not answer. A bare `{ ok: true }` would pass while the database was
+ * unreachable, so a release that could not serve a single page would be
+ * declared healthy. One cheap round trip makes the gate mean something.
+ */
+app.get('/api/health', async (c) => {
+  try {
+    await pool.query('SELECT 1');
+    return c.json({ ok: true, db: true });
+  } catch {
+    return c.json({ ok: false, db: false }, 503);
+  }
+});
 
 app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
 
@@ -88,11 +104,34 @@ serve({ fetch: app.fetch, port: env.port }, (info) => {
   stopScheduler = startScheduler();
 });
 
+/**
+ * Shut down without cutting a request off mid-flight.
+ *
+ * systemd sends SIGTERM on every deploy. Exiting immediately would abandon
+ * whatever was in the connection pool, which for a write means the caller sees
+ * a dropped connection and cannot tell whether it landed. Stop the scheduler,
+ * let the pool drain, and keep a hard deadline so a stuck query cannot hold
+ * the restart open forever.
+ */
+let shuttingDown = false;
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     stopScheduler();
-    process.exit(0);
+    const deadline = setTimeout(() => process.exit(0), 5000);
+    deadline.unref();
+    void pool
+      .end()
+      .catch(() => {})
+      .finally(() => process.exit(0));
   });
 }
+
+// A rejection nobody handled must not take the process down mid-session; log it
+// and let systemd's health gate catch anything that actually broke.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
 
 export type AppType = typeof app;
