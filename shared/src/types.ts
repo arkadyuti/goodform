@@ -18,7 +18,12 @@ export const DIETARY_PATTERNS = [
 ] as const;
 export type DietaryPattern = (typeof DIETARY_PATTERNS)[number];
 
-export const ACTIVITY_LEVELS = ['none', 'occasional_sport', 'regular_sport', 'other_cardio'] as const;
+export const ACTIVITY_LEVELS = [
+  'none',
+  'occasional_sport',
+  'regular_sport',
+  'other_cardio',
+] as const;
 export type ActivityLevel = (typeof ACTIVITY_LEVELS)[number];
 
 export const SMOKING_STATUSES = ['never', 'current', 'quitting', 'former'] as const;
@@ -148,6 +153,36 @@ export type DiscomfortLocation = (typeof DISCOMFORT_LOCATIONS)[number];
  * that the same prescription got easier — which is the adaptation, and is
  * otherwise invisible.
  */
+/**
+ * Discomfort severity, 1–5, recorded after a session.
+ *
+ * Unlike effort, this moves the plan: 3 twice in a week repeats it, 4 or above
+ * pauses progression. It carried a single line of explanation for the whole
+ * scale while effort — which changes nothing — had five named anchors, so the
+ * one number a beginner had to get right was the one they had no way to
+ * calibrate. Under-reporting is how people get hurt; over-reporting stalls
+ * them for no reason.
+ */
+export const SEVERITY_LEVELS = [
+  { value: 1, label: 'Noticed it', hint: 'You would not have mentioned it if nobody asked' },
+  { value: 2, label: 'Aware of it', hint: 'There while you ran, gone soon after' },
+  {
+    value: 3,
+    label: 'It changed how you ran',
+    hint: 'You shortened your stride or slowed down for it',
+  },
+  { value: 4, label: 'It made you stop, or want to', hint: 'Still there after the run' },
+  { value: 5, label: 'Sharp', hint: 'You could not have carried on' },
+] as const;
+
+export function severityLabel(value: number | null): string {
+  return SEVERITY_LEVELS.find((level) => level.value === value)?.label ?? '';
+}
+
+export function severityHint(value: number | null): string {
+  return SEVERITY_LEVELS.find((level) => level.value === value)?.hint ?? '';
+}
+
 export const EFFORT_LEVELS = [
   { value: 1, label: 'Easy', hint: 'Full sentences throughout, could have gone much longer' },
   { value: 2, label: 'Comfortable', hint: 'Talking was fine, never laboured' },
@@ -187,12 +222,7 @@ export interface WorkoutSession {
 // Gating
 // ---------------------------------------------------------------------------
 
-export type GateDecision =
-  | 'advance'
-  | 'offer_repeat'
-  | 'repeat'
-  | 'step_back'
-  | 'pause_medical';
+export type GateDecision = 'advance' | 'offer_repeat' | 'repeat' | 'step_back' | 'pause_medical';
 
 export interface GateResult {
   decision: GateDecision;

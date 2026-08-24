@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
+  severityHint,
+  severityLabel,
   DISCOMFORT_LOCATIONS,
   EFFORT_LEVELS,
   daysBetween,
@@ -321,7 +323,6 @@ function DayEditor({ day, isFuture }: { day: CalendarDay; isFuture: boolean }) {
             <Stepper
               label="Cigarettes"
               value={log.cigarettes}
-              tone="watch"
               max={100}
               onChange={(cigarettes) => saveLog.mutate({ ...log, cigarettes })}
             />
@@ -331,7 +332,6 @@ function DayEditor({ day, isFuture }: { day: CalendarDay; isFuture: boolean }) {
               label="Beer"
               value={log.beers}
               unit={log.beers === 1 ? 'drink' : 'drinks'}
-              tone="watch"
               max={50}
               onChange={(beers) => saveLog.mutate({ ...log, beers })}
             />
@@ -339,9 +339,9 @@ function DayEditor({ day, isFuture }: { day: CalendarDay; isFuture: boolean }) {
           {tracked.includes('alcohol') && (
             <Stepper
               label="Other alcohol"
+              hint="One unit is roughly a 30ml peg of spirits, half a glass of wine, or a third of a pint."
               value={log.alcoholUnits}
               unit="units"
-              tone="watch"
               max={50}
               onChange={(alcoholUnits) => saveLog.mutate({ ...log, alcoholUnits })}
             />
@@ -554,6 +554,12 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
                   </button>
                 ))}
               </div>
+            )}
+            {location && (
+              <p className="mt-1.5 text-[0.9375rem] leading-snug">
+                <span style={{ fontWeight: 600 }}>{severityLabel(severity)}</span>
+                <span className="text-ink-soft"> — {severityHint(severity)}</span>
+              </p>
             )}
           </div>
 

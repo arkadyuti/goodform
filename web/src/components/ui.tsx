@@ -45,6 +45,7 @@ export function Eyebrow({ children, className = '' }: { children: ReactNode; cla
 /** One-tap counters for the daily habits. No keyboards, no dialogs. */
 export function Stepper({
   label,
+  hint,
   value,
   unit,
   step = 1,
@@ -54,12 +55,21 @@ export function Stepper({
   tone = 'neutral',
 }: {
   label: string;
+  /** One line under the label, for a unit that is not self-explanatory. */
+  hint?: string;
   value: number;
   unit?: string;
   step?: number;
   min?: number;
   max?: number;
   onChange: (next: number) => void;
+  /**
+   * `watch` reddened the number as soon as it went above zero, which meant a
+   * smoker who logged one cigarette honestly was shown the same colour as a
+   * severity-4 injury. The accurate count is the win; it is not coloured like
+   * a warning any more. Kept because the tone is still the right idea for a
+   * threshold — it just needs a threshold, not "greater than nothing".
+   */
   tone?: 'neutral' | 'watch';
 }) {
   const clamp = (n: number) => Math.min(max, Math.max(min, Number(n.toFixed(2))));
@@ -67,9 +77,10 @@ export function Stepper({
     <div className="flex items-center justify-between gap-3 py-2.5">
       <div className="min-w-0">
         <p className="truncate text-[0.9375rem]">{label}</p>
+        {hint && <p className="text-[0.75rem] leading-snug text-ink-faint">{hint}</p>}
         <p className="tabular text-2xl leading-tight" style={{ fontWeight: 600 }}>
           <span className={tone === 'watch' && value > 0 ? 'text-alert' : ''}>{value}</span>
-          {unit && <span className="ml-1 text-sm font-normal text-ink-faint">{' '}{unit}</span>}
+          {unit && <span className="ml-1 text-sm font-normal text-ink-faint"> {unit}</span>}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -121,7 +132,10 @@ export function Field({
         {label}
       </span>
       {hint && (
-        <span className="mt-0.5 block text-[0.8125rem] text-ink-soft" id={group ? `${id}-hint` : undefined}>
+        <span
+          className="mt-0.5 block text-[0.8125rem] text-ink-soft"
+          id={group ? `${id}-hint` : undefined}
+        >
           {hint}
         </span>
       )}
@@ -132,11 +146,7 @@ export function Field({
     return (
       <div className="block">
         {body}
-        <div
-          className="mt-1.5"
-          role="group"
-          aria-labelledby={hint ? `${id} ${id}-hint` : id}
-        >
+        <div className="mt-1.5" role="group" aria-labelledby={hint ? `${id} ${id}-hint` : id}>
           {children}
         </div>
       </div>
@@ -196,12 +206,16 @@ export function Choices<T extends string>({
             aria-pressed={active}
             onClick={() => toggle(option.value)}
             className={`tap rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
-              active ? 'border-ink bg-ink text-chalk' : 'border-line bg-paper hover:border-ink-faint'
+              active
+                ? 'border-ink bg-ink text-chalk'
+                : 'border-line bg-paper hover:border-ink-faint'
             }`}
           >
             <span className="block text-[0.9375rem] leading-snug">{option.label}</span>
             {option.hint && (
-              <span className={`mt-0.5 block text-[0.8125rem] leading-snug ${active ? 'text-chalk/70' : 'text-ink-soft'}`}>
+              <span
+                className={`mt-0.5 block text-[0.8125rem] leading-snug ${active ? 'text-chalk/70' : 'text-ink-soft'}`}
+              >
                 {option.hint}
               </span>
             )}
@@ -212,11 +226,21 @@ export function Choices<T extends string>({
   );
 }
 
-export function Note({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'alert' | 'run' }) {
+export function Note({
+  children,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  tone?: 'neutral' | 'alert' | 'run';
+}) {
   const tones = {
     neutral: 'bg-chalk-deep text-ink-soft',
     alert: 'bg-alert-wash text-alert',
     run: 'bg-run-wash text-run-deep',
   };
-  return <p className={`rounded-xl px-3.5 py-3 text-[0.875rem] leading-relaxed ${tones[tone]}`}>{children}</p>;
+  return (
+    <p className={`rounded-xl px-3.5 py-3 text-[0.875rem] leading-relaxed ${tones[tone]}`}>
+      {children}
+    </p>
+  );
 }

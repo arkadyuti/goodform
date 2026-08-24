@@ -4,6 +4,8 @@ import { COOLDOWN_STRETCHES, COOLDOWN_WALK, RUN_CUES, WARMUP } from '@goodform/s
 import {
   effortHint,
   effortLabel,
+  severityHint,
+  severityLabel,
   type Discomfort,
   type DiscomfortLocation,
 } from '@goodform/shared';
@@ -711,9 +713,13 @@ function PostSession({
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-[0.8125rem] text-ink-faint">
-                1 is barely noticeable. 4 or more means we pause the plan and suggest getting it
-                looked at.
+              <p className="mt-1.5 text-[0.9375rem] leading-snug">
+                <span style={{ fontWeight: 600 }}>{severityLabel(severity)}</span>
+                <span className="text-ink-soft"> — {severityHint(severity)}</span>
+              </p>
+              <p className="mt-1 text-[0.8125rem] leading-snug text-ink-faint">
+                3 and above twice in a week repeats the week. A 4 pauses progression. Neither is a
+                punishment — they are the plan waiting for tissue that takes months, not weeks.
               </p>
             </div>
             {severity >= 4 && (

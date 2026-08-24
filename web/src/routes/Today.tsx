@@ -256,7 +256,6 @@ export function Today() {
               <Stepper
                 label="Cigarettes"
                 value={log.cigarettes}
-                tone="watch"
                 max={100}
                 onChange={(cigarettes) => saveLog.mutate({ ...log, cigarettes })}
               />
@@ -266,7 +265,6 @@ export function Today() {
                 label="Beer"
                 value={log.beers}
                 unit={log.beers === 1 ? 'drink' : 'drinks'}
-                tone="watch"
                 max={50}
                 onChange={(beers) => saveLog.mutate({ ...log, beers })}
               />
@@ -274,9 +272,9 @@ export function Today() {
             {tracked.includes('alcohol') && (
               <Stepper
                 label="Other alcohol"
+                hint="One unit is roughly a 30ml peg of spirits, half a glass of wine, or a third of a pint."
                 value={log.alcoholUnits}
                 unit="units"
-                tone="watch"
                 max={50}
                 onChange={(alcoholUnits) => saveLog.mutate({ ...log, alcoholUnits })}
               />
