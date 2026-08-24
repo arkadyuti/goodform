@@ -1,0 +1,133 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  DEPLOY_ROOT: /opt/goodform
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm -r test
+
+      # The target is a 512MB VPS. Everything is built here and shipped as
+      # plain files, so the box never runs a package manager or a compiler.
+      - name: Build
+        run: pnpm build
+
+      - name: Assemble release
+        run: |
+          set -euo pipefail
+          mkdir -p release/web
+          cp -r server/dist/. release/
+          cp -r server/drizzle release/drizzle
+          cp -r web/dist release/web/dist
+          echo "${GITHUB_SHA}" > release/REVISION
+          tar -czf release.tgz -C release .
+          ls -la release.tgz
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Pinned host key, so a hijacked DNS answer cannot collect the key.
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: scp release.tgz "$USER@$HOST:/tmp/goodform-release.tgz"
+
+      # Unpack beside the running release, migrate, then move a symlink. The
+      # previous release stays on disk so a failed health check can put it back.
+      - name: Release
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          SHA: ${{ github.sha }}
+        run: |
+          ssh "$USER@$HOST" "SHA=$SHA bash -s" <<'REMOTE'
+          set -euo pipefail
+          ROOT=/opt/goodform
+          NEW="$ROOT/releases/$SHA"
+          PREVIOUS="$(readlink -f "$ROOT/current" || true)"
+
+          rm -rf "$NEW" && mkdir -p "$NEW"
+          tar -xzf /tmp/goodform-release.tgz -C "$NEW"
+          rm -f /tmp/goodform-release.tgz
+          chown -R goodform:goodform "$NEW"
+
+          set -a; . "$ROOT/.env"; set +a
+          MIGRATIONS_DIR="$NEW/drizzle" node "$NEW/migrate.js"
+          MIGRATIONS_DIR="$NEW/drizzle" node "$NEW/seed.js"
+
+          ln -sfn "$NEW" "$ROOT/current.new" && mv -Tf "$ROOT/current.new" "$ROOT/current"
+          systemctl restart goodform
+
+          # Health-gate the release; put the old one back rather than leave the
+          # site down.
+          ok=""
+          for _ in $(seq 1 30); do
+            sleep 2
+            if curl -fsS --max-time 4 http://127.0.0.1:8790/api/health | grep -q '"ok":true'; then ok=1; break; fi
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::Health check failed; rolling back"
+            journalctl -u goodform -n 60 --no-pager || true
+            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
+              ln -sfn "$PREVIOUS" "$ROOT/current.new" && mv -Tf "$ROOT/current.new" "$ROOT/current"
+              systemctl restart goodform
+            fi
+            exit 1
+          fi
+
+          echo "Healthy at $(cat "$NEW/REVISION")"
+          # Keep the last five releases so a rollback target always exists.
+          ls -1dt "$ROOT"/releases/*/ | tail -n +6 | xargs -r rm -rf
+          REMOTE
+
+      - name: Verify public URL
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 20); do
+            if curl -fsS --max-time 8 https://goodform.visharka.us/api/health | grep -q '"ok":true'; then
+              echo "Public health check passed"; exit 0
+            fi
+            sleep 3
+          done
+          echo "Public health check failed"; exit 1
