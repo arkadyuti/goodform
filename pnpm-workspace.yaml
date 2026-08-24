@@ -2,3 +2,9 @@ packages:
   - web
   - server
   - shared
+
+# pnpm 10 blocks dependency install scripts by default. esbuild's postinstall
+# fetches its platform binary, so without this the production bundle cannot be
+# built — locally or in CI.
+onlyBuiltDependencies:
+  - esbuild
