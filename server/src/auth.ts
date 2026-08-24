@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { APIError } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { db, schema } from './db/index.js';
 import { env, googleEnabled } from './env.js';
@@ -51,6 +52,32 @@ export const auth = betterAuth({
       // never link to one. Google's own verification of the address is the
       // evidence we actually have, and it is the stronger of the two.
       requireLocalEmailVerified: false,
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        /**
+         * The one place both sign-up routes meet.
+         *
+         * GoodForm is a personal app on a public address. Left open, the
+         * email/password form lets anyone who finds the URL create an account,
+         * and Google sign-in does the same for any Google user alive. Gating
+         * user *creation* rather than either login route covers both at once,
+         * and cannot be bypassed by picking the other provider.
+         *
+         * Signing in still works normally for accounts that already exist —
+         * this only decides who may make a new one.
+         */
+        before: async (user: { email?: string }) => {
+          if (env.signupAllowlist.length === 0) return;
+          const email = (user.email ?? '').toLowerCase();
+          if (env.signupAllowlist.includes(email)) return;
+          throw new APIError('FORBIDDEN', {
+            message: 'This app is not open for sign-ups.',
+          });
+        },
+      },
     },
   },
   trustedOrigins: [env.appUrl, ...env.devOrigins],

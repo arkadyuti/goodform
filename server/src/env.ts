@@ -14,6 +14,17 @@ export const env = {
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
   devLogin: process.env.DEV_LOGIN === 'true',
+  /**
+   * Addresses allowed to create an account, comma separated.
+   *
+   * Empty means anyone can, which is right on a laptop and wrong on a public
+   * URL. It gates both sign-up methods, because the point is who may hold an
+   * account here at all, not which button they arrived through.
+   */
+  signupAllowlist: (process.env.SIGNUP_ALLOWLIST ?? '')
+    .split(',')
+    .map((address) => address.trim().toLowerCase())
+    .filter(Boolean),
   isProd: process.env.NODE_ENV === 'production',
   /** Vite dev server, allowed through CORS while developing. */
   devOrigins: (process.env.DEV_ORIGINS ?? 'http://localhost:5173').split(','),
