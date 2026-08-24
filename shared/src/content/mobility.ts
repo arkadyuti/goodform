@@ -14,15 +14,32 @@ export const WARMUP: MobilityItem[] = [
   { id: 'wu-skips', name: 'Easy skips', amount: 20, unit: 'reps', perSide: false, cue: 'Light and springy — this is a rehearsal, not a workout.' },
 ];
 
-/** FR-4.4: static holds belong here, after the run, with per-hold timers. */
-export const COOLDOWN: MobilityItem[] = [
-  { id: 'cd-walk', name: 'Easy walk', amount: 180, unit: 'seconds', perSide: false, cue: 'Let your breathing settle before you stop moving.' },
+/**
+ * The walk is not a stretch — it is what brings the heart rate down before you
+ * stop moving, so it genuinely has to come first.
+ */
+export const COOLDOWN_WALK: MobilityItem = {
+  id: 'cd-walk',
+  name: 'Easy walk',
+  amount: 180,
+  unit: 'seconds',
+  perSide: false,
+  cue: 'Let your breathing settle before you stop moving.',
+};
+
+/**
+ * Static holds, for after the walk. Order among them does not matter, so the
+ * app lets them be taken in any order.
+ */
+export const COOLDOWN_STRETCHES: MobilityItem[] = [
   { id: 'cd-calf-wall', name: 'Calf stretch at a wall', amount: 30, unit: 'seconds', perSide: true, cue: 'Back leg straight, heel down. Then repeat with the knee softly bent.' },
   { id: 'cd-quad', name: 'Standing quad stretch', amount: 30, unit: 'seconds', perSide: true, cue: 'Knees together, hips forward, no arching the back.' },
   { id: 'cd-hamstring', name: 'Hamstring stretch', amount: 30, unit: 'seconds', perSide: true, cue: 'Heel down, toes up, hinge from the hips with a flat back.' },
   { id: 'cd-hip-flexor', name: 'Kneeling hip flexor stretch', amount: 30, unit: 'seconds', perSide: true, cue: 'Squeeze the back glute and the stretch appears at the front of the hip.' },
   { id: 'cd-glute', name: 'Figure-four glute stretch', amount: 30, unit: 'seconds', perSide: true, cue: 'Sit or lie down. Ankle across the opposite knee, draw the leg in.' },
 ];
+
+export const COOLDOWN: MobilityItem[] = [COOLDOWN_WALK, ...COOLDOWN_STRETCHES];
 
 /** FR-4.3: form cues, shown once per session so they teach rather than nag. */
 export const RUN_CUES = [

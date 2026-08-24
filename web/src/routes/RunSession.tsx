@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { COOLDOWN, RUN_CUES, STOP_RULES, WARMUP } from '@goodform/shared/content';
+import { COOLDOWN_STRETCHES, COOLDOWN_WALK, RUN_CUES, STOP_RULES, WARMUP } from '@goodform/shared/content';
 import type { Discomfort, DiscomfortLocation } from '@goodform/shared';
 import { useLogSession, usePlan, useProfile } from '../api/hooks.ts';
 import { today } from '../lib/date.ts';
@@ -355,90 +355,142 @@ function Intervals({
 // ---------------------------------------------------------------------------
 
 function Cooldown({ onDone }: { onDone: () => void }) {
-  const [index, setIndex] = useState(0);
-  const [remaining, setRemaining] = useState(COOLDOWN[0]!.amount);
-  const [running, setRunning] = useState(false);
-  const item = COOLDOWN[index]!;
+  const [done, setDone] = useState<Record<string, boolean>>({});
+  const [active, setActive] = useState<string | null>(null);
+  const [remaining, setRemaining] = useState(0);
 
+  const items = useMemo(() => [COOLDOWN_WALK, ...COOLDOWN_STRETCHES], []);
+  const activeItem = items.find((i) => i.id === active) ?? null;
+  const stretchesDone = COOLDOWN_STRETCHES.filter((i) => done[i.id]).length;
+
+  const start = (id: string) => {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    setActive(id);
+    setRemaining(item.amount);
+  };
+
+  // Wall-clock again: a hold must not stall because the screen dimmed.
   useEffect(() => {
-    if (!running) return;
-    const startedAt = Date.now();
-    const from = remaining;
+    if (!activeItem) return;
+    const endsAt = Date.now() + remaining * 1000;
     const id = window.setInterval(() => {
-      const left = from - (Date.now() - startedAt) / 1000;
+      const left = (endsAt - Date.now()) / 1000;
       if (left <= 0) {
         window.clearInterval(id);
-        setRunning(false);
-        if (index < COOLDOWN.length - 1) {
-          setIndex(index + 1);
-          setRemaining(COOLDOWN[index + 1]!.amount);
-          setRunning(true);
-        } else {
-          setRemaining(0);
-        }
+        setDone((d) => ({ ...d, [activeItem.id]: true }));
+        setActive(null);
+        setRemaining(0);
       } else {
         setRemaining(left);
       }
     }, 100);
     return () => window.clearInterval(id);
-    // Restarting the hold restarts the countdown from whatever is left.
-  }, [running, index]);
-
-  const last = index === COOLDOWN.length - 1;
+    // Restarting a hold restarts its countdown.
+  }, [active]);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-5">
       <Eyebrow>Cool-down</Eyebrow>
       <h1 className="mt-2 text-3xl" style={{ fontWeight: 780 }}>
-        Now you can hold
+        Walk it off, then stretch
       </h1>
       <p className="mt-2 leading-relaxed text-ink-soft">
-        {index + 1} of {COOLDOWN.length}. Each hold counts itself down and moves on.
+        The walk comes first — it brings your heart rate down before you stop moving. After that, take the
+        stretches in whatever order suits you.
       </p>
 
-      <Card className="mt-5">
-        <p className="text-xl font-semibold">
-          {item.name}
-          {item.perSide && <span className="ml-2 text-[0.9375rem] font-normal text-ink-faint">each side</span>}
-        </p>
-        <p className="mt-1 text-[0.9375rem] leading-snug text-ink-soft">{item.cue}</p>
-        <p className="tabular mt-4 text-6xl" style={{ fontWeight: 800 }}>
-          {Math.ceil(remaining)}
-          <span className="ml-1 text-xl font-normal text-ink-faint">s</span>
-        </p>
-        <div className="mt-4 flex gap-2.5">
-          <Button full onClick={() => setRunning(!running)}>
-            {running ? 'Pause' : remaining === 0 ? 'Repeat' : 'Start hold'}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setRunning(false);
-              if (last) return onDone();
-              setIndex(index + 1);
-              setRemaining(COOLDOWN[index + 1]!.amount);
-            }}
-          >
-            {last ? 'Finish' : 'Next'}
-          </Button>
-        </div>
-      </Card>
+      <div className="mt-5 flex flex-col gap-2.5">
+        <CooldownItem
+          item={COOLDOWN_WALK}
+          step="First"
+          done={done[COOLDOWN_WALK.id] ?? false}
+          active={active === COOLDOWN_WALK.id}
+          remaining={remaining}
+          onStart={() => start(COOLDOWN_WALK.id)}
+          onSkip={() => setDone((d) => ({ ...d, [COOLDOWN_WALK.id]: true }))}
+        />
 
-      <ol className="mt-4 flex flex-col gap-1.5">
-        {COOLDOWN.map((c, i) => (
-          <li
-            key={c.id}
-            className={`flex items-center gap-2.5 text-[0.875rem] ${i === index ? 'text-ink' : 'text-ink-faint'}`}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${i < index ? 'bg-good' : i === index ? 'bg-ink' : 'bg-line'}`} />
-            {c.name}
-          </li>
+        <p className="eyebrow mt-3">
+          Then, any order · {stretchesDone} of {COOLDOWN_STRETCHES.length} done
+        </p>
+
+        {COOLDOWN_STRETCHES.map((item) => (
+          <CooldownItem
+            key={item.id}
+            item={item}
+            done={done[item.id] ?? false}
+            active={active === item.id}
+            remaining={remaining}
+            onStart={() => start(item.id)}
+            onSkip={() => setDone((d) => ({ ...d, [item.id]: true }))}
+          />
         ))}
-      </ol>
+      </div>
 
-      <Button variant="quiet" full className="mt-5 py-3" onClick={onDone}>
-        Skip the rest and log the session
+      <Button full className="mt-5 py-4 text-[1.0625rem]" onClick={onDone}>
+        {stretchesDone === COOLDOWN_STRETCHES.length ? 'Done — log the session' : 'Finish and log the session'}
       </Button>
+    </div>
+  );
+}
+
+function CooldownItem({
+  item,
+  step,
+  done,
+  active,
+  remaining,
+  onStart,
+  onSkip,
+}: {
+  item: { id: string; name: string; amount: number; perSide: boolean; cue: string };
+  step?: string;
+  done: boolean;
+  active: boolean;
+  remaining: number;
+  onStart: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-xl border p-3.5 transition-colors ${
+        active ? 'border-ink bg-paper' : done ? 'border-line bg-chalk-deep' : 'border-line bg-paper'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {step && <p className="eyebrow mb-0.5">{step}</p>}
+          <p className={`font-semibold ${done && !active ? 'text-ink-faint' : ''}`}>
+            {item.name}
+            {item.perSide && <span className="ml-2 text-[0.875rem] font-normal text-ink-faint">each side</span>}
+          </p>
+          <p className="mt-0.5 text-[0.875rem] leading-snug text-ink-soft">{item.cue}</p>
+        </div>
+        {done && !active && (
+          <span className="shrink-0 text-good" aria-label="Done">
+            ✓
+          </span>
+        )}
+      </div>
+
+      {active ? (
+        <p className="tabular mt-3 text-5xl" style={{ fontWeight: 800 }}>
+          {Math.ceil(remaining)}
+          <span className="ml-1 text-lg font-normal text-ink-faint">s</span>
+        </p>
+      ) : (
+        <div className="mt-3 flex gap-2">
+          <Button variant={done ? 'secondary' : 'primary'} onClick={onStart}>
+            {done ? `Again · ${item.amount}s` : `Start · ${item.amount}s`}
+          </Button>
+          {!done && (
+            <Button variant="quiet" onClick={onSkip}>
+              Skip
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
