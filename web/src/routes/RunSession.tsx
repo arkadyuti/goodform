@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { COOLDOWN_STRETCHES, COOLDOWN_WALK, RUN_CUES, WARMUP } from '@goodform/shared/content';
-import { effortHint, effortLabel, type Discomfort, type DiscomfortLocation } from '@goodform/shared';
+import {
+  effortHint,
+  effortLabel,
+  type Discomfort,
+  type DiscomfortLocation,
+} from '@goodform/shared';
 import { useLogSession, usePlan, useProfile } from '../api/hooks.ts';
 import { today } from '../lib/date.ts';
 import { Cues, hapticsSupported } from '../timer/cues.ts';
-import { IntervalTimer, buildIntervals, formatClock, type Interval, type TimerState } from '../timer/engine.ts';
+import {
+  IntervalTimer,
+  buildIntervals,
+  formatClock,
+  type Interval,
+  type TimerState,
+} from '../timer/engine.ts';
 import { ScreenWakeLock } from '../timer/wakeLock.ts';
 import { Button, Card, Choices, Eyebrow, Note } from '../components/ui.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
@@ -27,6 +38,14 @@ export function RunSession() {
   const [stage, setStage] = useState<Stage>('warmup');
   const [elapsedAtFinish, setElapsedAtFinish] = useState(0);
   const [intervalsDone, setIntervalsDone] = useState(0);
+
+  // Stable identity: the three setters never change, so this never does either,
+  // and the timer below is not rebuilt because the parent re-rendered.
+  const handleDone = useCallback((elapsed: number, completedIntervals: number) => {
+    setElapsedAtFinish(elapsed);
+    setIntervalsDone(completedIntervals);
+    setStage('cooldown');
+  }, []);
 
   if (!week || !plan) {
     return (
@@ -50,11 +69,7 @@ export function RunSession() {
           walkSec={week.walkSec}
           reps={week.reps}
           settings={settings}
-          onDone={(elapsed, completedIntervals) => {
-            setElapsedAtFinish(elapsed);
-            setIntervalsDone(completedIntervals);
-            setStage('cooldown');
-          }}
+          onDone={handleDone}
         />
       )}
       {stage === 'cooldown' && <Cooldown onDone={() => setStage('log')} />}
@@ -113,12 +128,18 @@ function Warmup({
         Wake the legs up
       </h1>
       <p className="mt-2 leading-relaxed text-ink-soft">
-        Movement only — no holding stretches yet. Static stretching now would take away exactly the tendon
-        stiffness that protects you while you run.
+        Movement only — no holding stretches yet. Static stretching now would take away exactly the
+        tendon stiffness that protects you while you run.
       </p>
 
       <div className="mt-5">
-        <IntervalRibbon runSec={week.runSec} walkSec={week.walkSec} reps={week.reps} height={14} label />
+        <IntervalRibbon
+          runSec={week.runSec}
+          walkSec={week.walkSec}
+          reps={week.reps}
+          height={14}
+          label
+        />
       </div>
 
       <ul className="mt-5 flex flex-col gap-2">
@@ -130,7 +151,9 @@ function Warmup({
                 onClick={() => setDone((d) => ({ ...d, [item.id]: !isDone }))}
                 aria-pressed={isDone}
                 className={`flex w-full items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
-                  isDone ? 'border-line bg-chalk-deep' : 'border-line bg-paper hover:border-ink-faint'
+                  isDone
+                    ? 'border-line bg-chalk-deep'
+                    : 'border-line bg-paper hover:border-ink-faint'
                 }`}
               >
                 <span
@@ -142,7 +165,9 @@ function Warmup({
                   {isDone && '✓'}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className={`block font-medium ${isDone ? 'text-ink-faint line-through' : ''}`}>
+                  <span
+                    className={`block font-medium ${isDone ? 'text-ink-faint line-through' : ''}`}
+                  >
                     {item.name}
                     <span className="ml-2 font-normal text-ink-faint">
                       {item.unit === 'reps'
@@ -153,7 +178,9 @@ function Warmup({
                       {item.perSide && ' each side'}
                     </span>
                   </span>
-                  <span className="mt-0.5 block text-[0.8125rem] leading-snug text-ink-soft">{item.cue}</span>
+                  <span className="mt-0.5 block text-[0.8125rem] leading-snug text-ink-soft">
+                    {item.cue}
+                  </span>
                 </span>
               </button>
             </li>
@@ -192,14 +219,16 @@ function Intervals({
   runSec: number;
   walkSec: number;
   reps: number;
-  settings: { soundEnabled: boolean; hapticsEnabled: boolean; audioMode: 'transient' | 'playback' } | null | undefined;
+  settings:
+    | { soundEnabled: boolean; hapticsEnabled: boolean; audioMode: 'transient' | 'playback' }
+    | null
+    | undefined;
   onDone: (elapsedSec: number, completedIntervals: number) => void;
 }) {
   const intervals = useMemo(() => buildIntervals(runSec, walkSec, reps), [runSec, walkSec, reps]);
   const [state, setState] = useState<TimerState | null>(null);
   const [started, setStarted] = useState(false);
   const timerRef = useRef<IntervalTimer | null>(null);
-  const cuesRef = useRef<Cues | null>(null);
   const wakeRef = useRef<ScreenWakeLock | null>(null);
 
   const cues = useMemo(
@@ -212,42 +241,68 @@ function Intervals({
     [settings?.soundEnabled, settings?.hapticsEnabled, settings?.audioMode],
   );
 
+  /**
+   * The live handlers, read through a ref.
+   *
+   * The timer must outlive every re-render of this screen. If the effect that
+   * builds it depended on handler identity, anything that re-rendered the
+   * parent — a background sync draining the offline queue and invalidating
+   * queries, say — would tear the timer down and build a new one: elapsed time
+   * back to zero, paused, the AudioContext closed for good and the wake lock
+   * dropped, all silently, in the middle of a run. Keeping the handlers in a
+   * ref means they can change freely while the timer stays put.
+   */
+  const handlers = useRef({ cues, reps, onDone });
+  // Refreshed after every render rather than during one, so nothing is written
+  // to a ref while React is rendering. The timer's callbacks run later, so they
+  // always see the current values.
+  useEffect(() => {
+    handlers.current = { cues, reps, onDone };
+  });
+
+  /**
+   * Ends the session: from the timer reaching the end, or from the runner
+   * tapping "End session and log it". Stable identity, because everything it
+   * needs is behind a ref.
+   */
   const finish = useCallback(() => {
     const final = timerRef.current?.state();
-    cuesRef.current?.finish();
+    const { cues: liveCues, reps: liveReps, onDone: done } = handlers.current;
+    liveCues.finish();
     void wakeRef.current?.release();
-    const completed = final ? Math.ceil(final.index / 2) : reps;
-    onDone(final?.totalElapsed ?? 0, Math.min(completed, reps));
-  }, [onDone, reps]);
+    const completed = final ? Math.ceil(final.index / 2) : liveReps;
+    done(final?.totalElapsed ?? 0, Math.min(completed, liveReps));
+  }, []);
 
   useEffect(() => {
-    cuesRef.current = cues;
-    wakeRef.current = new ScreenWakeLock();
+    const wake = new ScreenWakeLock();
+    wakeRef.current = wake;
     const timer = new IntervalTimer(intervals, {
       onTick: setState,
       onPhaseChange: (_from, to) => {
         if (!to) return;
-        if (to.phase === 'run') cues.runCue();
-        if (to.phase === 'walk') cues.walkCue();
+        if (to.phase === 'run') handlers.current.cues.runCue();
+        if (to.phase === 'walk') handlers.current.cues.walkCue();
       },
-      onCountdown: () => cues.countdown(),
+      onCountdown: () => handlers.current.cues.countdown(),
       onFinish: finish,
     });
     timerRef.current = timer;
     // The timer is the source of truth and it was just constructed, so React
-    // has to be told its opening state. This runs once per prescription, not
-    // per render, so it is a handoff from an external system rather than the
-    // cascading update the rule is aimed at.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // has to be told its opening state. Once per prescription, not per render.
     setState(timer.state());
 
     return () => {
       timer.destroy();
-      wakeRef.current?.destroy();
-      cues.release();
+      wake.destroy();
     };
-    // The timer is built once per prescription; cues are stable per settings.
-  }, [intervals, cues, finish]);
+    // Only the prescription. Handlers travel by ref, on purpose — see above,
+    // and `finish` is stable.
+  }, [intervals, finish]);
+
+  // The AudioContext belongs to this screen, not to a handler identity, so it
+  // is closed when the screen goes away and not before.
+  useEffect(() => () => cues.release(), [cues]);
 
   const begin = async () => {
     await cues.arm();
@@ -266,7 +321,10 @@ function Intervals({
   return (
     <div
       className={`flex min-h-dvh flex-col transition-colors duration-300 ${isRun ? 'bg-run' : 'bg-walk'}`}
-      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
     >
       <div className="flex items-center justify-between px-4 py-3">
         <p className={`eyebrow ${isRun ? '!text-white/80' : '!text-ink/70'}`}>
@@ -277,7 +335,9 @@ function Intervals({
         </p>
       </div>
 
-      <div className={`flex flex-1 flex-col items-center justify-center px-6 ${isRun ? 'text-white' : 'text-ink'}`}>
+      <div
+        className={`flex flex-1 flex-col items-center justify-center px-6 ${isRun ? 'text-white' : 'text-ink'}`}
+      >
         <p
           className="display text-[clamp(2.25rem,11vw,3.5rem)] uppercase"
           style={{ fontWeight: 800, letterSpacing: '0.02em', fontVariationSettings: "'wdth' 122" }}
@@ -292,7 +352,9 @@ function Intervals({
           {formatClock(remaining)}
         </p>
         <p className={`mt-4 text-[1.0625rem] ${isRun ? 'text-white/85' : 'text-ink/80'}`}>
-          {isRun ? 'Conversational pace. Short, quick steps.' : 'Keep moving. Let the breath settle.'}
+          {isRun
+            ? 'Conversational pace. Short, quick steps.'
+            : 'Keep moving. Let the breath settle.'}
         </p>
       </div>
 
@@ -323,7 +385,9 @@ function Intervals({
             <button
               onClick={() => timerRef.current?.rewind(30)}
               className={`tap flex-1 rounded-2xl py-4 font-medium transition-colors ${
-                isRun ? 'bg-white/18 text-white hover:bg-white/28' : 'bg-ink/12 text-ink hover:bg-ink/20'
+                isRun
+                  ? 'bg-white/18 text-white hover:bg-white/28'
+                  : 'bg-ink/12 text-ink hover:bg-ink/20'
               }`}
             >
               −30s
@@ -339,7 +403,9 @@ function Intervals({
             <button
               onClick={() => timerRef.current?.skip()}
               className={`tap flex-1 rounded-2xl py-4 font-medium transition-colors ${
-                isRun ? 'bg-white/18 text-white hover:bg-white/28' : 'bg-ink/12 text-ink hover:bg-ink/20'
+                isRun
+                  ? 'bg-white/18 text-white hover:bg-white/28'
+                  : 'bg-ink/12 text-ink hover:bg-ink/20'
               }`}
             >
               Skip
@@ -404,8 +470,8 @@ function Cooldown({ onDone }: { onDone: () => void }) {
         Walk it off, then stretch
       </h1>
       <p className="mt-2 leading-relaxed text-ink-soft">
-        The walk comes first — it brings your heart rate down before you stop moving. After that, take the
-        stretches in whatever order suits you.
+        The walk comes first — it brings your heart rate down before you stop moving. After that,
+        take the stretches in whatever order suits you.
       </p>
 
       <div className="mt-5 flex flex-col gap-2.5">
@@ -437,7 +503,9 @@ function Cooldown({ onDone }: { onDone: () => void }) {
       </div>
 
       <Button full className="mt-5 py-4 text-[1.0625rem]" onClick={onDone}>
-        {stretchesDone === COOLDOWN_STRETCHES.length ? 'Done — log the session' : 'Finish and log the session'}
+        {stretchesDone === COOLDOWN_STRETCHES.length
+          ? 'Done — log the session'
+          : 'Finish and log the session'}
       </Button>
     </div>
   );
@@ -471,7 +539,9 @@ function CooldownItem({
           {step && <p className="eyebrow mb-0.5">{step}</p>}
           <p className={`font-semibold ${done && !active ? 'text-ink-faint' : ''}`}>
             {item.name}
-            {item.perSide && <span className="ml-2 text-[0.875rem] font-normal text-ink-faint">each side</span>}
+            {item.perSide && (
+              <span className="ml-2 text-[0.875rem] font-normal text-ink-faint">each side</span>
+            )}
           </p>
           <p className="mt-0.5 text-[0.875rem] leading-snug text-ink-soft">{item.cue}</p>
         </div>
@@ -525,9 +595,16 @@ function PostSession({
   planned: number;
   completed: number;
   durationSec: number;
-  onSave: (input: { completion: 'full' | 'partial' | 'skipped'; effort: number; discomfort: Discomfort | null; notes: string | null }) => Promise<void>;
+  onSave: (input: {
+    completion: 'full' | 'partial' | 'skipped';
+    effort: number;
+    discomfort: Discomfort | null;
+    notes: string | null;
+  }) => Promise<void>;
 }) {
-  const [completion, setCompletion] = useState<'full' | 'partial'>(completed >= planned ? 'full' : 'partial');
+  const [completion, setCompletion] = useState<'full' | 'partial'>(
+    completed >= planned ? 'full' : 'partial',
+  );
   const [effort, setEffort] = useState(3);
   const [hasDiscomfort, setHasDiscomfort] = useState(false);
   const [location, setLocation] = useState<DiscomfortLocation>('shin');
@@ -570,7 +647,9 @@ function PostSession({
                 onClick={() => setEffort(n)}
                 aria-pressed={effort === n}
                 className={`tap flex-1 rounded-xl border py-3 text-lg font-semibold transition-colors ${
-                  effort === n ? 'border-ink bg-ink text-chalk' : 'border-line bg-paper hover:border-ink-faint'
+                  effort === n
+                    ? 'border-ink bg-ink text-chalk'
+                    : 'border-line bg-paper hover:border-ink-faint'
                 }`}
               >
                 {n}
@@ -578,8 +657,8 @@ function PostSession({
             ))}
           </div>
           <p className="mt-1.5 text-[0.8125rem] text-ink-faint">
-            <strong className="text-ink-soft">{effortLabel(effort)}</strong> — {effortHint(effort)}. This is for
-            your own reading of the block; it does not change the plan.
+            <strong className="text-ink-soft">{effortLabel(effort)}</strong> — {effortHint(effort)}.
+            This is for your own reading of the block; it does not change the plan.
           </p>
         </div>
 
@@ -603,7 +682,12 @@ function PostSession({
             <div>
               <Eyebrow>Where?</Eyebrow>
               <div className="mt-1.5">
-                <Choices value={[location]} onChange={([v]) => v && setLocation(v)} options={LOCATIONS} columns={2} />
+                <Choices
+                  value={[location]}
+                  onChange={([v]) => v && setLocation(v)}
+                  options={LOCATIONS}
+                  columns={2}
+                />
               </div>
             </div>
             <div>
@@ -627,13 +711,14 @@ function PostSession({
                 ))}
               </div>
               <p className="mt-1.5 text-[0.8125rem] text-ink-faint">
-                1 is barely noticeable. 4 or more means we pause the plan and suggest getting it looked at.
+                1 is barely noticeable. 4 or more means we pause the plan and suggest getting it
+                looked at.
               </p>
             </div>
             {severity >= 4 && (
               <Note tone="alert">
-                Progression will pause. Rest it, and get it assessed before you run again — this is the point of
-                logging honestly.
+                Progression will pause. Rest it, and get it assessed before you run again — this is
+                the point of logging honestly.
               </Note>
             )}
           </>

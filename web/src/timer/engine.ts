@@ -43,7 +43,7 @@ export class IntervalTimer {
   private startedAt = 0;
   private accumulated = 0;
   private running = false;
-  private raf: number | null = null;
+  private raf: { raf: number | null; timeout: number } | null = null;
   private lastAnnouncedIndex = -1;
   private lastCountdown = -1;
 
@@ -168,6 +168,12 @@ export class IntervalTimer {
 
   private loop = (): void => {
     if (!this.running) return;
+    // A round is scheduled twice — an animation frame and a timeout — so that a
+    // hidden page still ticks. Whichever fires first cancels its sibling here,
+    // otherwise every round would leave one live callback behind and the number
+    // of them would double each time.
+    if (this.raf !== null) unschedule(this.raf);
+    this.raf = null;
     this.tick();
     if (this.running) this.raf = schedule(this.loop);
   };
@@ -176,15 +182,28 @@ export class IntervalTimer {
 /**
  * Prefers animation frames for a smooth display, but the timer's correctness
  * never depends on them — position always comes from the wall clock.
+ *
+ * The fallback timeout is not only for environments without rAF. Animation
+ * frames stop entirely on a hidden page, and on this screen that is the case
+ * that matters most: a phone in a pocket. The clock stays right either way,
+ * but ticks are what emit the run and walk cues, so without a second source
+ * the beeps that let a runner not look at the screen simply never arrive.
+ * Running both means whichever one the browser still services keeps the cues
+ * coming; `tick()` is idempotent, so being called twice costs nothing.
  */
-function schedule(callback: () => void): number {
-  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(callback);
-  return setTimeout(callback, 200) as unknown as number;
+function schedule(callback: () => void): { raf: number | null; timeout: number } {
+  return {
+    raf: typeof requestAnimationFrame === 'function' ? requestAnimationFrame(callback) : null,
+    // Background timers are throttled to about a second, which is fine: cues
+    // are emitted on a phase boundary, not on a particular frame.
+    timeout: setTimeout(callback, 200) as unknown as number,
+  };
 }
 
-function unschedule(handle: number): void {
-  if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(handle);
-  else clearTimeout(handle);
+function unschedule(handle: { raf: number | null; timeout: number }): void {
+  if (handle.raf !== null && typeof cancelAnimationFrame === 'function')
+    cancelAnimationFrame(handle.raf);
+  clearTimeout(handle.timeout);
 }
 
 export function formatClock(seconds: number): string {
