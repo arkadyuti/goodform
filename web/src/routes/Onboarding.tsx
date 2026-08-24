@@ -372,7 +372,10 @@ export function Onboarding() {
           title="Injuries and equipment"
           blurb="Past injuries change which strength work you get and how fast the running builds."
         >
-          <Field label="Have any of these given you trouble?" hint="Select all that apply.">
+          <Field
+            label="Have any of these given you trouble?"
+            hint="Select any that apply, or leave them all unselected if nothing has."
+          >
             <Choices
               multiple
               columns={2}
@@ -393,6 +396,7 @@ export function Onboarding() {
             <Choices
               multiple
               columns={2}
+              exclusive="none"
               value={draft.equipment ?? []}
               onChange={(v) => set('equipment', v.length ? v : ['none'])}
               options={[

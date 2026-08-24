@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { toggleChoice } from '../lib/choices.ts';
 
 type Variant = 'primary' | 'secondary' | 'quiet' | 'alert';
 
@@ -127,17 +128,23 @@ export function Choices<T extends string>({
   onChange,
   multiple = false,
   columns = 1,
+  exclusive,
 }: {
   options: { value: T; label: string; hint?: string }[];
   value: T[] | T;
   onChange: (next: T[]) => void;
   multiple?: boolean;
   columns?: 1 | 2;
+  /**
+   * An option that cannot coexist with the others — "Nothing", "None of these".
+   * Choosing it clears the rest; choosing anything else clears it.
+   */
+  exclusive?: T;
 }) {
   const selected = Array.isArray(value) ? value : [value];
   const toggle = (option: T) => {
     if (!multiple) return onChange([option]);
-    onChange(selected.includes(option) ? selected.filter((v) => v !== option) : [...selected, option]);
+    onChange(toggleChoice(selected, option, exclusive));
   };
   return (
     <div className={`grid gap-2 ${columns === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
