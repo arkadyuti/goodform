@@ -10,9 +10,17 @@ import { requireAuth, type AppEnv } from '../middleware.js';
 
 type Cell = string | number | boolean | null | undefined | Date;
 
-function cell(value: Cell): string {
+export function cell(value: Cell): string {
   if (value === null || value === undefined) return '';
-  const text = value instanceof Date ? value.toISOString() : String(value);
+  let text = value instanceof Date ? value.toISOString() : String(value);
+  // Excel and Sheets treat a leading =, +, - or @ as the start of a formula, so
+  // a custom food named `=HYPERLINK("http://…","Click")` would run on open
+  // rather than read as a name. A leading apostrophe is the spreadsheet's own
+  // "this is text" marker; it is not shown in the cell.
+  // Numbers are exempt: -0.4 is a weight change, not a formula, and quoting it
+  // would turn a numeric column into text.
+  const numeric = typeof value === 'number' || (text !== '' && Number.isFinite(Number(text)));
+  if (!numeric && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   // Quote anything a spreadsheet would otherwise misread, and double any quote
   // inside it — the whole of RFC 4180 that matters in practice.
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
