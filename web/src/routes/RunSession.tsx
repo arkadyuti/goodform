@@ -611,6 +611,7 @@ function PostSession({
   const [severity, setSeverity] = useState<1 | 2 | 3 | 4 | 5>(2);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-5">
@@ -741,16 +742,32 @@ function PostSession({
           disabled={saving}
           onClick={async () => {
             setSaving(true);
-            await onSave({
-              completion,
-              effort,
-              discomfort: hasDiscomfort ? { location, severity } : null,
-              notes: notes.trim() || null,
-            });
+            setSaveError(null);
+            try {
+              await onSave({
+                completion,
+                effort,
+                discomfort: hasDiscomfort ? { location, severity } : null,
+                notes: notes.trim() || null,
+              });
+            } catch {
+              // Someone who has just finished a run needs to be told, not left
+              // watching a button that says "Saving" for ever. The write itself
+              // is queued unless the server actually rejected it, so trying
+              // again is usually all that is needed.
+              setSaveError('That did not save. Your session is still here — try again.');
+            } finally {
+              setSaving(false);
+            }
           }}
         >
           {saving ? 'Saving' : 'Save session'}
         </Button>
+        {saveError && (
+          <p className="mt-2.5 text-center text-[0.9375rem] text-alert" role="alert">
+            {saveError}
+          </p>
+        )}
       </div>
     </div>
   );

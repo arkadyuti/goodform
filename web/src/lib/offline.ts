@@ -49,12 +49,23 @@ export async function flush(): Promise<number> {
         headers: { 'Content-Type': 'application/json' },
         body: write.method === 'DELETE' ? undefined : JSON.stringify(write.body),
       });
-      // A rejected write will never succeed on retry; drop it rather than
-      // blocking everything behind it.
+      // Not signed in. These writes are perfectly good and will land as soon
+      // as there is a session again, so stop draining and keep every one of
+      // them — deleting here used to destroy a finished run and then report it
+      // as synced, which is the worst of both.
+      if (response.status === 401 || response.status === 403) break;
+
+      // A write the server has actually rejected will never succeed on retry;
+      // drop it rather than blocking everything behind it.
       if (response.ok || (response.status >= 400 && response.status < 500)) {
         await db.delete('queue', write.id);
         sent += 1;
+        continue;
       }
+
+      // 5xx: the server is unwell, not the write. Leave it queued and stop, so
+      // the order it was made in survives.
+      break;
     } catch {
       break; // Still offline — keep the rest queued in order.
     }
