@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { HTTPException } from 'hono/http-exception';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -88,10 +89,36 @@ if (env.isProd) {
     const root = relative(process.cwd(), webDist) || '.';
     const indexHtml = join(webDist, 'index.html');
     app.use('/*', serveStatic({ root }));
-    // Client-side routes fall back to the shell.
-    app.get('*', async (c) => c.html(await readFile(indexHtml, 'utf8')));
+    // Client-side routes fall back to the shell — but an unknown /api path must
+    // not. Without the guard it would answer a mistyped endpoint with the HTML
+    // shell and a 200, and the client would try to parse a page as JSON.
+    app.get('*', async (c) => {
+      if (c.req.path.startsWith('/api/')) return c.json({ error: 'Not found' }, 404);
+      return c.html(await readFile(indexHtml, 'utf8'));
+    });
   }
 }
+
+/**
+ * One place every unhandled route error ends up.
+ *
+ * Without this, a thrown database error travels to the client as whatever the
+ * framework decides to say, which can include the query and the schema. The
+ * caller gets a shape it can actually parse, the detail stays in the journal
+ * where the operator can read it, and a 404 for an unknown /api path returns
+ * JSON rather than the SPA shell.
+ */
+app.onError((err, c) => {
+  console.error(`${c.req.method} ${c.req.path} failed:`, err);
+  if (err instanceof HTTPException) return err.getResponse();
+  return c.json({ error: 'Something went wrong. Please try again.' }, 500);
+});
+
+app.notFound((c) =>
+  c.req.path.startsWith('/api/')
+    ? c.json({ error: 'Not found' }, 404)
+    : c.text('Not found', 404),
+);
 
 let stopScheduler: () => void = () => {};
 
