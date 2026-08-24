@@ -15,7 +15,15 @@ const LINKS = [
  */
 export function Nav() {
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-chalk/92 backdrop-blur-sm">
+    <header
+      className="sticky top-0 z-30 border-b border-line bg-chalk/92 backdrop-blur-sm"
+      // Installed on iOS the page runs under the status bar, because index.html
+      // asks for viewport-fit=cover. This is the sticky element, so the inset
+      // belongs here rather than on body — without it the clock and battery sit
+      // on top of the offline banner, which is the one message a runner with no
+      // signal actually needs to read.
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <ConnectionState />
       <div className="mx-auto flex w-full max-w-2xl items-center gap-1 px-2">
         {/*
@@ -24,7 +32,11 @@ export function Nav() {
           mark is brand rather than navigation — it points at "/", which Today
           already does — so it stands down on phones and returns above 640px.
         */}
-        <NavLink to="/" className="tap hidden items-center gap-2 px-2 sm:flex" aria-label="GoodForm home">
+        <NavLink
+          to="/"
+          className="tap hidden items-center gap-2 px-2 sm:flex"
+          aria-label="GoodForm home"
+        >
           <span className="flex h-3.5 w-9 overflow-hidden rounded-full">
             <span className="h-full flex-[3] bg-run" />
             <span className="h-full flex-[1] bg-walk" />
@@ -92,7 +104,15 @@ export function Nav() {
               }`
             }
           >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              aria-hidden
+            >
               <circle cx="12" cy="12" r="3.2" />
               <path d="M12 2.5v2.6M12 18.9v2.6M4.2 4.2l1.9 1.9M17.9 17.9l1.9 1.9M2.5 12h2.6M18.9 12h2.6M4.2 19.8l1.9-1.9M17.9 6.1l1.9-1.9" />
             </svg>

@@ -21,7 +21,10 @@ export function StrengthSession() {
   const sessions = useMemo(
     () =>
       profile
-        ? buildStrengthSessions({ equipment: profile.equipment, injuryHistory: profile.injuryHistory }, { emphasis })
+        ? buildStrengthSessions(
+            { equipment: profile.equipment, injuryHistory: profile.injuryHistory },
+            { emphasis },
+          )
         : [],
     [profile, emphasis],
   );
@@ -58,10 +61,21 @@ export function StrengthSession() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-5">
+    <div
+      className="mx-auto w-full max-w-2xl px-4 py-5"
+      // Routed as immersive, so there is no nav above it to hold the inset —
+      // without this the first row sits under the iOS status bar.
+      style={{
+        paddingTop: 'calc(1.25rem + env(safe-area-inset-top))',
+        paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
+      }}
+    >
       <div className="flex items-center justify-between">
         <Eyebrow>Strength · session {session.slot}</Eyebrow>
-        <button onClick={() => navigate('/')} className="tap px-2 text-[0.875rem] text-ink-faint hover:text-ink">
+        <button
+          onClick={() => navigate('/')}
+          className="tap px-2 text-[0.875rem] text-ink-faint hover:text-ink"
+        >
           Not today
         </button>
       </div>
@@ -69,13 +83,14 @@ export function StrengthSession() {
         The work that keeps you running
       </h1>
       <p className="mt-2 leading-relaxed text-ink-soft">
-        Tempo matters more than weight here. Slow lowering is what builds tendon stiffness, and tendon stiffness
-        is what absorbs every step you take.
+        Tempo matters more than weight here. Slow lowering is what builds tendon stiffness, and
+        tendon stiffness is what absorbs every step you take.
       </p>
 
       {emphasis && (
         <Note tone="run">
-          Extra work this week while your running holds steady. This is the part that lets the tissue catch up.
+          Extra work this week while your running holds steady. This is the part that lets the
+          tissue catch up.
         </Note>
       )}
 
@@ -103,7 +118,11 @@ export function StrengthSession() {
                   <div className="min-w-0">
                     <p className="font-semibold">
                       {exercise.name}
-                      {exercise.perSide && <span className="ml-2 text-[0.875rem] font-normal text-ink-faint">each side</span>}
+                      {exercise.perSide && (
+                        <span className="ml-2 text-[0.875rem] font-normal text-ink-faint">
+                          each side
+                        </span>
+                      )}
                     </p>
                     <p className="text-[0.8125rem] text-ink-faint">{exercise.target}</p>
                   </div>
@@ -120,7 +139,9 @@ export function StrengthSession() {
                   </span>
                   <span>
                     <span className="tabular font-semibold">{reps}</span> reps
-                    {reps !== exercise.reps && <span className="ml-1 text-[0.75rem] text-good">progressed</span>}
+                    {reps !== exercise.reps && (
+                      <span className="ml-1 text-[0.75rem] text-good">progressed</span>
+                    )}
                   </span>
                   <span className="text-walk-deep">{exercise.tempo}</span>
                 </div>
@@ -137,11 +158,15 @@ export function StrengthSession() {
                   {Array.from({ length: exercise.sets }, (_, i) => (
                     <button
                       key={i}
-                      onClick={() => setSetsDone((s) => ({ ...s, [exercise.id]: done > i ? i : i + 1 }))}
+                      onClick={() =>
+                        setSetsDone((s) => ({ ...s, [exercise.id]: done > i ? i : i + 1 }))
+                      }
                       aria-label={`Set ${i + 1} of ${exercise.name}`}
                       aria-pressed={done > i}
                       className={`tap flex-1 rounded-xl border font-semibold transition-colors ${
-                        done > i ? 'border-good bg-good text-white' : 'border-line bg-chalk hover:border-ink-faint'
+                        done > i
+                          ? 'border-good bg-good text-white'
+                          : 'border-line bg-chalk hover:border-ink-faint'
                       }`}
                     >
                       {done > i ? '✓' : i + 1}

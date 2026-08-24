@@ -66,15 +66,25 @@ export function App() {
   if (profileLoading) return <Loading />;
 
   const onboarded = Boolean(profileData?.profile);
-  if (!onboarded && location.pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  if (!onboarded && location.pathname !== '/onboarding')
+    return <Navigate to="/onboarding" replace />;
 
   // The session player takes the whole screen — no navigation to mis-tap mid-run.
-  const immersive = location.pathname.startsWith('/session/') || location.pathname === '/onboarding';
+  const immersive =
+    location.pathname.startsWith('/session/') || location.pathname === '/onboarding';
 
   return (
     <div className="min-h-dvh">
       {!immersive && <Nav />}
-      <main className={immersive ? '' : 'mx-auto w-full max-w-2xl px-4 pt-4 pb-16'}>
+      <main
+        className={immersive ? '' : 'mx-auto w-full max-w-2xl px-4 pt-4 pb-16'}
+        // The bottom padding clears the iPhone home indicator today by
+        // coincidence; the inset makes it deliberate. Immersive screens set
+        // their own, because they paint to the edges on purpose.
+        style={
+          immersive ? undefined : { paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))' }
+        }
+      >
         <Routes>
           <Route path="/" element={<Today />} />
           <Route path="/onboarding" element={<Onboarding />} />

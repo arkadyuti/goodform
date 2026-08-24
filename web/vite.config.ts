@@ -13,7 +13,8 @@ export default defineConfig({
       manifest: {
         name: 'GoodForm',
         short_name: 'GoodForm',
-        description: 'Adaptive run-walk training and daily habits, built to keep beginners running.',
+        description:
+          'Adaptive run-walk training and daily habits, built to keep beginners running.',
         theme_color: '#14201b',
         background_color: '#f1f3ee',
         display: 'standalone',
@@ -40,7 +41,10 @@ export default defineConfig({
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
             handler: 'CacheFirst',
-            options: { cacheName: 'fonts', expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+            options: {
+              cacheName: 'fonts',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
           },
           {
             // Read-only app data, including the session check, is served from
@@ -51,7 +55,15 @@ export default defineConfig({
               request.method === 'GET' &&
               // Exports are one-off downloads of the whole account; caching
               // them would fill the quota and serve a stale copy next time.
-              !url.pathname.startsWith('/api/account/export'),
+              !url.pathname.startsWith('/api/account/export') &&
+              // Never the session check. A cached one outlives signing out, so
+              // the next person to open the app on a shared phone — offline,
+              // or on a slow link — would be let straight into the previous
+              // user's account and their medicine list.
+              !url.pathname.startsWith('/api/auth/') &&
+              // Which sign-in methods exist is a server fact, and a stale copy
+              // shows buttons that no longer work.
+              url.pathname !== '/api/config',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'app-data',
