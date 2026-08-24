@@ -199,10 +199,22 @@ export const nutritionRoutes = new Hono<AppEnv>()
       foodItemId: parsed.data.foodItemId,
       servings: String(parsed.data.servings),
     };
-    await db
+    // The id comes from the client, so the offline queue can retry a write
+    // without creating a second entry. That makes the conflict clause an
+    // authorisation boundary: matching on the primary key alone would let a
+    // request naming someone else's entry id update *their* row. `setWhere`
+    // keeps the update inside the caller's own data, and a colliding id
+    // belonging to anyone else simply does nothing.
+    const [written] = await db
       .insert(schema.nutritionEntries)
       .values(values)
-      .onConflictDoUpdate({ target: schema.nutritionEntries.id, set: { servings: values.servings } });
+      .onConflictDoUpdate({
+        target: schema.nutritionEntries.id,
+        set: { servings: values.servings },
+        setWhere: eq(schema.nutritionEntries.userId, userId),
+      })
+      .returning({ id: schema.nutritionEntries.id });
+    if (!written) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true, id: parsed.data.id });
   })
 
