@@ -168,6 +168,47 @@ export function Today() {
         </Card>
       )}
 
+      {/*
+        What that session just changed.
+        Logging one used to end in silence — the form promises "thirty seconds
+        now decides next week" and then nothing ever showed what it decided.
+      */}
+      {ready && (runDone || strengthDone) && plan?.status === 'active' && week && (
+        <WeekProgress
+          runsDone={
+            (sessionData?.sessions ?? []).filter(
+              (session) =>
+                (session.type === 'run' || session.type === 'baseline') &&
+                session.completion !== 'skipped' &&
+                session.date >= startOfWeek(date) &&
+                session.date <= date,
+            ).length
+          }
+          runsPlanned={week.sessionsPerWeek}
+          weekIndex={plan.currentWeek}
+        />
+      )}
+
+      {/*
+        The other kind of session, on any day the plan asked for one.
+        `/session/strength` was linked from a single place, gated on it being a
+        strength day, so it could not be opened on five days out of seven — and
+        a run could not be started on a strength day at all. The plan advises;
+        it does not lock the door.
+      */}
+      {ready && scheduled !== 'rest' && plan?.status === 'active' && (
+        <Button
+          variant="quiet"
+          full
+          className="py-3"
+          onClick={() => navigate(scheduled === 'run' ? '/session/strength' : '/session/run')}
+        >
+          {scheduled === 'run'
+            ? 'Do the strength session instead'
+            : "Run instead — it's a strength day"}
+        </Button>
+      )}
+
       {ready &&
         scheduled !== 'rest' &&
         plan?.status === 'active' &&
@@ -334,6 +375,49 @@ export function Today() {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Where the week stands, shown the moment a session is logged.
+ *
+ * The gate that actually decides anything only speaks at the end of the week,
+ * which left the most motivated moment in the whole app — just after finishing
+ * — with nothing to say. This is not the gate and does not pretend to be; it
+ * is the count, and what the count is heading towards.
+ */
+function WeekProgress({
+  runsDone,
+  runsPlanned,
+  weekIndex,
+}: {
+  runsDone: number;
+  runsPlanned: number;
+  weekIndex: number;
+}) {
+  const left = Math.max(0, runsPlanned - runsDone);
+  return (
+    <Card>
+      <Eyebrow>Where week {weekIndex} stands</Eyebrow>
+      <p className="mt-1.5 flex items-baseline gap-2">
+        <span className="tabular text-4xl" style={{ fontWeight: 800 }}>
+          {runsDone}
+        </span>
+        <span className="text-ink-soft">
+          of {runsPlanned} run{runsPlanned === 1 ? '' : 's'} this week
+        </span>
+      </p>
+      <p className="mt-2 leading-snug text-ink-soft">
+        {left === 0
+          ? 'That is the week. Nothing above mild discomfort and the plan moves on at the review.'
+          : left === 1
+            ? 'One more and the week is done.'
+            : `${left} to go.`}
+      </p>
+      <Link to="/plan" className="mt-3 block text-[0.875rem] text-run underline underline-offset-4">
+        See the week
+      </Link>
+    </Card>
   );
 }
 

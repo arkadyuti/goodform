@@ -63,7 +63,31 @@ export function RunSession() {
   return (
     <div className="min-h-dvh">
       {stage === 'warmup' && (
-        <Warmup week={week} onStart={() => setStage('intervals')} onQuit={() => navigate('/')} />
+        <Warmup
+          week={week}
+          onStart={() => setStage('intervals')}
+          /**
+           * Deciding not to run is a decision, and the plan should hear it.
+           * This used to navigate away logging nothing, so the week's gate
+           * later read a deliberate rest day and a forgotten one as the same
+           * silence — and only one of those is worth adjusting a plan for.
+           */
+          onQuit={() => {
+            logSession.mutate({
+              id: crypto.randomUUID(),
+              date: today(),
+              type: 'run',
+              planId: plan.id,
+              planWeek: plan.currentWeek,
+              prescription: { runSec: week.runSec, walkSec: week.walkSec, reps: week.reps },
+              completion: 'skipped',
+              effort: null,
+              discomfort: null,
+              notes: null,
+            });
+            void navigate('/');
+          }}
+        />
       )}
       {stage === 'intervals' && (
         <Intervals

@@ -398,3 +398,40 @@ describe('generatePlan continuing from a finished block', () => {
     expect(plan.conservatismReasons[0]).toContain('holds you there');
   });
 });
+
+describe('a session declined on purpose', () => {
+  const week = { index: 3, runSec: 120, walkSec: 90, reps: 4, sessionsPerWeek: 3, isDeload: false, totalRunSec: 1440 };
+  const run = (completion: 'full' | 'partial' | 'skipped'): WorkoutSession => ({
+    id: `s-${completion}-${Math.round(week.runSec)}`,
+    date: '2026-08-24',
+    type: 'run',
+    planWeek: 3,
+    prescription: week,
+    completion,
+    effort: null,
+    discomfort: null,
+    intervalsCompleted: null,
+    durationSec: null,
+    notes: null,
+  });
+
+  it('reaches the same decision as silence', () => {
+    // The plan still reshapes — saying no does not earn a free pass.
+    const declined = evaluateWeek(week, [{ ...run('skipped'), id: 'a' }, { ...run('skipped'), id: 'b' }]);
+    expect(declined.decision).toBe('step_back');
+  });
+
+  it('but is not described as something missed', () => {
+    const declined = evaluateWeek(week, [{ ...run('skipped'), id: 'a' }, { ...run('skipped'), id: 'b' }]);
+    expect(declined.reason).toContain('called off');
+    expect(declined.reason).not.toContain('missed');
+
+    const silent = evaluateWeek(week, []);
+    expect(silent.reason).toContain('missed');
+  });
+
+  it('does not count as attempted', () => {
+    const one = evaluateWeek(week, [{ ...run('full'), id: 'a' }, { ...run('full'), id: 'b' }, { ...run('skipped'), id: 'c' }]);
+    expect(one.decision).toBe('offer_repeat');
+  });
+});

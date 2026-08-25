@@ -11,6 +11,16 @@ export function evaluateWeek(week: PlanWeek, sessions: WorkoutSession[]): GateRe
   const completed = runs.filter((s) => s.completion === 'full').length;
   const attempted = runs.filter((s) => s.completion !== 'skipped').length;
   const missed = planned - attempted;
+  // A session the runner said no to, rather than one that simply never
+  // happened. The decision is the same either way — the plan still reshapes —
+  // but being told you "missed" something you deliberately chose to skip reads
+  // as an accusation, and this app does not make those.
+  // Any session the runner explicitly called off. `missed` counts the whole
+  // shortfall, including sessions never logged at all, so it is always at least
+  // this — which is why the test is "did they say anything" rather than a
+  // comparison between the two.
+  const declined = runs.filter((s) => s.completion === 'skipped').length;
+  const deliberate = declined > 0;
 
   const severities = runs
     .map((s) => s.discomfort?.severity ?? 0)
@@ -41,8 +51,9 @@ export function evaluateWeek(week: PlanWeek, sessions: WorkoutSession[]): GateRe
   if (missed >= 2) {
     return {
       decision: 'step_back',
-      reason:
-        'Two or more sessions were missed. You can repeat this week or step back one — both are normal and the plan reshapes around it.',
+      reason: deliberate
+        ? 'You called off part of this week. That is a decision, not a gap — repeat this week or step back one, whichever fits what is going on.'
+        : 'Two or more sessions were missed. You can repeat this week or step back one — both are normal and the plan reshapes around it.',
       overridable: true,
       strengthEmphasis: false,
     };
@@ -51,8 +62,9 @@ export function evaluateWeek(week: PlanWeek, sessions: WorkoutSession[]): GateRe
   if (completed < planned) {
     return {
       decision: 'offer_repeat',
-      reason:
-        'Not every session finished as planned. Repeating this week is the safe call, but it is your choice.',
+      reason: deliberate
+        ? 'You sat one out this week. Repeating is the safe call, but it is your choice.'
+        : 'Not every session finished as planned. Repeating this week is the safe call, but it is your choice.',
       overridable: true,
       strengthEmphasis: false,
     };

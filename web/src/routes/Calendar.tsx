@@ -386,7 +386,7 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [type, setType] = useState<SessionType>(day.scheduled === 'strength' ? 'strength' : 'run');
-  const [completion, setCompletion] = useState<'full' | 'partial'>('full');
+  const [completion, setCompletion] = useState<'full' | 'partial' | 'skipped'>('full');
   const [effort, setEffort] = useState(3);
   const [minutes, setMinutes] = useState('');
   const [location, setLocation] = useState<DiscomfortLocation | null>(null);
@@ -494,96 +494,104 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
                 options={[
                   { value: 'full' as const, label: 'Finished it' },
                   { value: 'partial' as const, label: 'Cut it short' },
+                  // A day you chose to take off is not a gap in the record.
+                  { value: 'skipped' as const, label: 'Decided not to' },
                 ]}
               />
             </div>
           </div>
 
-          <div>
-            <span className="eyebrow">How hard was it</span>
-            <div className="mt-1.5 flex gap-1.5">
-              {EFFORT_LEVELS.map((level) => (
-                <button
-                  key={level.value}
-                  type="button"
-                  aria-pressed={effort === level.value}
-                  aria-label={`${level.value} of 5 — ${level.label}`}
-                  onClick={() => setEffort(level.value)}
-                  className={`tap flex-1 rounded-xl border text-[0.9375rem] transition-colors ${
-                    effort === level.value
-                      ? 'border-ink bg-ink text-chalk'
-                      : 'border-line bg-paper hover:border-ink-faint'
-                  }`}
-                >
-                  {level.value}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-faint">
-              <strong className="text-ink-soft">{effortLabel(effort)}</strong> —{' '}
-              {effortHint(effort)}. Recorded for your own reading of the block; it does not change
-              the plan.
-            </p>
-          </div>
-
-          <Field label="Minutes" hint="Optional">
-            <TextInput
-              type="number"
-              inputMode="numeric"
-              value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
-            />
-          </Field>
-
-          <div>
-            <span className="eyebrow">Any discomfort</span>
-            <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-soft">
-              Unlike effort, this does move the plan: 3 twice in a week repeats it, 4 or above
-              pauses it.
-            </p>
-            <div className="mt-1.5">
-              <Choices
-                columns={2}
-                value={location ? [location] : []}
-                onChange={([v]) => setLocation(v === location ? null : (v ?? null))}
-                options={DISCOMFORT_LOCATIONS.map((site) => ({ value: site, label: site }))}
-              />
-            </div>
-            {location && (
-              <div className="mt-2 flex gap-1.5">
-                {SEVERITIES.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    aria-pressed={severity === n}
-                    aria-label={`Severity ${n} of 5`}
-                    onClick={() => setSeverity(n)}
-                    className={`tap flex-1 rounded-xl border text-[0.9375rem] transition-colors ${
-                      severity === n
-                        ? n >= 4
-                          ? 'border-alert bg-alert text-white'
-                          : 'border-walk bg-walk text-ink'
-                        : 'border-line bg-paper hover:border-ink-faint'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
+          {/* None of what follows means anything about a session that did not
+              happen, so it is not asked. */}
+          {completion !== 'skipped' && (
+            <>
+              <div>
+                <span className="eyebrow">How hard was it</span>
+                <div className="mt-1.5 flex gap-1.5">
+                  {EFFORT_LEVELS.map((level) => (
+                    <button
+                      key={level.value}
+                      type="button"
+                      aria-pressed={effort === level.value}
+                      aria-label={`${level.value} of 5 — ${level.label}`}
+                      onClick={() => setEffort(level.value)}
+                      className={`tap flex-1 rounded-xl border text-[0.9375rem] transition-colors ${
+                        effort === level.value
+                          ? 'border-ink bg-ink text-chalk'
+                          : 'border-line bg-paper hover:border-ink-faint'
+                      }`}
+                    >
+                      {level.value}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-faint">
+                  <strong className="text-ink-soft">{effortLabel(effort)}</strong> —{' '}
+                  {effortHint(effort)}. Recorded for your own reading of the block; it does not
+                  change the plan.
+                </p>
               </div>
-            )}
-            {location && (
-              <p className="mt-1.5 text-[0.9375rem] leading-snug">
-                <span style={{ fontWeight: 600 }}>{severityLabel(severity)}</span>
-                <span className="text-ink-soft"> — {severityHint(severity)}</span>
-              </p>
-            )}
-          </div>
 
-          {location && severity >= 4 && (
-            <Note tone="alert">
-              Logging a 4 or above will pause progression, exactly as it would have at the time.
-              That is the point of recording it honestly.
-            </Note>
+              <Field label="Minutes" hint="Optional">
+                <TextInput
+                  type="number"
+                  inputMode="numeric"
+                  value={minutes}
+                  onChange={(e) => setMinutes(e.target.value)}
+                />
+              </Field>
+
+              <div>
+                <span className="eyebrow">Any discomfort</span>
+                <p className="mt-0.5 text-[0.8125rem] leading-snug text-ink-soft">
+                  Unlike effort, this does move the plan: 3 twice in a week repeats it, 4 or above
+                  pauses it.
+                </p>
+                <div className="mt-1.5">
+                  <Choices
+                    columns={2}
+                    value={location ? [location] : []}
+                    onChange={([v]) => setLocation(v === location ? null : (v ?? null))}
+                    options={DISCOMFORT_LOCATIONS.map((site) => ({ value: site, label: site }))}
+                  />
+                </div>
+                {location && (
+                  <div className="mt-2 flex gap-1.5">
+                    {SEVERITIES.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        aria-pressed={severity === n}
+                        aria-label={`Severity ${n} of 5`}
+                        onClick={() => setSeverity(n)}
+                        className={`tap flex-1 rounded-xl border text-[0.9375rem] transition-colors ${
+                          severity === n
+                            ? n >= 4
+                              ? 'border-alert bg-alert text-white'
+                              : 'border-walk bg-walk text-ink'
+                            : 'border-line bg-paper hover:border-ink-faint'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {location && (
+                  <p className="mt-1.5 text-[0.9375rem] leading-snug">
+                    <span style={{ fontWeight: 600 }}>{severityLabel(severity)}</span>
+                    <span className="text-ink-soft"> — {severityHint(severity)}</span>
+                  </p>
+                )}
+              </div>
+
+              {location && severity >= 4 && (
+                <Note tone="alert">
+                  Logging a 4 or above will pause progression, exactly as it would have at the time.
+                  That is the point of recording it honestly.
+                </Note>
+              )}
+            </>
           )}
 
           <div className="flex gap-2.5">
