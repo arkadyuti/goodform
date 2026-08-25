@@ -1,12 +1,30 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router';
 import { App } from './App.tsx';
 import { startSyncWatcher } from './api/client.ts';
 import './index.css';
 
+/**
+ * Nothing a mutation does fails silently.
+ *
+ * Every write goes through TanStack Query, and most callers are
+ * `onClick={async () => …}` — where a rejection has nowhere to go and shows up
+ * only as an unhandled rejection in a console nobody has open. That is how a
+ * finished run came to vanish with the button still reading "Saving". Screens
+ * that can say something useful still catch locally; this is the floor beneath
+ * them, so a failure is at least recorded.
+ */
+const mutationCache = new MutationCache({
+  onError: (error, _variables, _context, mutation) => {
+    const what = mutation.options.mutationKey?.join('/') ?? 'a write';
+    console.error(`Mutation failed (${what}):`, error);
+  },
+});
+
 const queryClient = new QueryClient({
+  mutationCache,
   defaultOptions: {
     // 'always' rather than the default 'online': offline reads are answered
     // from the service worker cache, and offline writes must reach the

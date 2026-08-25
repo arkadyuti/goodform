@@ -57,7 +57,8 @@ export async function pushToUser(userId: string, payload: PushPayload): Promise<
   );
 
   for (const [index, result] of results.entries()) {
-    const subscription = subscriptions[index]!;
+    const subscription = subscriptions[index];
+    if (!subscription) continue;
     if (result.status === 'fulfilled') {
       delivered += 1;
       continue;

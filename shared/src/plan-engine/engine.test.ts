@@ -67,7 +67,13 @@ describe('generatePlan', () => {
       baseProfile,
       { ...baseProfile, goal: 'five_k' },
       { ...baseProfile, goal: 'ten_k' },
-      { ...baseProfile, age: 52, smokingStatus: 'current', injuryHistory: ['shin'], activityLevel: 'none' },
+      {
+        ...baseProfile,
+        age: 52,
+        smokingStatus: 'current',
+        injuryHistory: ['shin'],
+        activityLevel: 'none',
+      },
     ];
     for (const profile of profiles) {
       for (const baseline of [breathBaseline, legBaseline]) {
@@ -76,7 +82,9 @@ describe('generatePlan', () => {
           if (i === 0) return;
           // Compare against the last week that actually built volume.
           const reference = [...plan.weeks.slice(0, i)].reverse().find((p) => !p.isDeload)!;
-          expect(w.totalRunSec).toBeLessThanOrEqual(reference.totalRunSec * MAX_WEEKLY_GROWTH + 0.001);
+          expect(w.totalRunSec).toBeLessThanOrEqual(
+            reference.totalRunSec * MAX_WEEKLY_GROWTH + 0.001,
+          );
         });
       }
     }
@@ -99,7 +107,11 @@ describe('generatePlan', () => {
   });
 
   it('does not tell a runner what their baseline run showed when they never ran', () => {
-    const plan = generatePlan(baseProfile, { minutesRun: 0, stopReason: 'legs', recordedAt: '2026-08-24' }, '2026-08-24');
+    const plan = generatePlan(
+      baseProfile,
+      { minutesRun: 0, stopReason: 'legs', recordedAt: '2026-08-24' },
+      '2026-08-24',
+    );
     expect(plan.conservatism).toBeGreaterThanOrEqual(2);
     expect(plan.conservatismReasons.join(' ')).not.toContain('baseline run ended');
     expect(plan.conservatismReasons.join(' ')).toContain('no running at all');
@@ -145,7 +157,11 @@ describe('generatePlan', () => {
 
 describe('evaluateWeek', () => {
   it('advances on three full sessions with no real discomfort', () => {
-    const result = evaluateWeek(week, [session(), session(), session({ discomfort: { location: 'calf', severity: 2 } })]);
+    const result = evaluateWeek(week, [
+      session(),
+      session(),
+      session({ discomfort: { location: 'calf', severity: 2 } }),
+    ]);
     expect(result.decision).toBe('advance');
   });
 
@@ -166,7 +182,11 @@ describe('evaluateWeek', () => {
   });
 
   it('pauses for a medical check at severity 4 (SR-3)', () => {
-    const result = evaluateWeek(week, [session({ discomfort: { location: 'knee', severity: 4 } }), session(), session()]);
+    const result = evaluateWeek(week, [
+      session({ discomfort: { location: 'knee', severity: 4 } }),
+      session(),
+      session(),
+    ]);
     expect(result.decision).toBe('pause_medical');
   });
 
@@ -185,7 +205,11 @@ describe('evaluateWeek', () => {
   });
 
   it('treats skipped sessions as missed', () => {
-    const result = evaluateWeek(week, [session(), session({ completion: 'skipped' }), session({ completion: 'skipped' })]);
+    const result = evaluateWeek(week, [
+      session(),
+      session({ completion: 'skipped' }),
+      session({ completion: 'skipped' }),
+    ]);
     expect(result.decision).toBe('step_back');
   });
 });
@@ -223,7 +247,10 @@ describe('strength', () => {
   });
 
   it('never prescribes a contraindicated exercise', () => {
-    const sessions = buildStrengthSessions({ equipment: ['dumbbells'], injuryHistory: ['knee', 'achilles'] });
+    const sessions = buildStrengthSessions({
+      equipment: ['dumbbells'],
+      injuryHistory: ['knee', 'achilles'],
+    });
     for (const s of sessions) {
       for (const e of s.exercises) {
         expect(e.contraindicatedFor).not.toContain('knee');
@@ -234,7 +261,10 @@ describe('strength', () => {
 });
 
 describe('daysClear', () => {
-  const log = (date: string, over: Partial<{ cigarettes: number; alcoholUnits: number; beers: number }> = {}) => ({
+  const log = (
+    date: string,
+    over: Partial<{ cigarettes: number; alcoholUnits: number; beers: number }> = {},
+  ) => ({
     date,
     cigarettes: 0,
     alcoholUnits: 0,
@@ -243,7 +273,12 @@ describe('daysClear', () => {
   });
 
   it('counts consecutive clear days back from the most recent log', () => {
-    expect(daysClear([log('2026-08-24'), log('2026-08-23'), log('2026-08-22', { cigarettes: 3 })], 'cigarettes')).toBe(2);
+    expect(
+      daysClear(
+        [log('2026-08-24'), log('2026-08-23'), log('2026-08-22', { cigarettes: 3 })],
+        'cigarettes',
+      ),
+    ).toBe(2);
   });
 
   it('treats a beer as breaking an alcohol-free run', () => {
@@ -255,15 +290,34 @@ describe('daysClear', () => {
 });
 
 describe('block reassessment', () => {
-  const weeks: PlanWeek[] = Array.from({ length: 8 }, (_, i) =>
-    ({ index: i + 1, runSec: 120 + i * 60, walkSec: 60, reps: 4, sessionsPerWeek: 3, isDeload: false, totalRunSec: 0 }),
-  );
+  const weeks: PlanWeek[] = Array.from({ length: 8 }, (_, i) => ({
+    index: i + 1,
+    runSec: 120 + i * 60,
+    walkSec: 60,
+    reps: 4,
+    sessionsPerWeek: 3,
+    isDeload: false,
+    totalRunSec: 0,
+  }));
 
   const finished = (over: Partial<WorkoutSession> = {}) =>
-    session({ prescription: { index: 8, runSec: 540, walkSec: 60, reps: 2, sessionsPerWeek: 3, isDeload: false, totalRunSec: 3240 }, ...over });
+    session({
+      prescription: {
+        index: 8,
+        runSec: 540,
+        walkSec: 60,
+        reps: 2,
+        sessionsPerWeek: 3,
+        isDeload: false,
+        totalRunSec: 3240,
+      },
+      ...over,
+    });
 
   it('reads what was reached from what was logged, not what was prescribed', () => {
-    const outcome = summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [finished()]);
+    const outcome = summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [
+      finished(),
+    ]);
     expect(outcome.achievedRunSec).toBe(540);
     expect(outcome.continueFrom).toEqual({ runSec: 540, walkSec: 60, reps: 2 });
   });
@@ -271,7 +325,7 @@ describe('block reassessment', () => {
   it('does not credit a week that was only skipped through', () => {
     const outcome = summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [
       finished({ completion: 'skipped' }),
-      session({ prescription: weeks[2]!, id: 'b' }),
+      session({ prescription: weeks[2], id: 'b' }),
     ]);
     expect(outcome.achievedRunSec).toBe(weeks[2]!.runSec);
   });
@@ -282,7 +336,9 @@ describe('block reassessment', () => {
   });
 
   it('always offers holding where you are, and recommends it after real discomfort', () => {
-    const calm = nextGoalOptions(summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [finished()]));
+    const calm = nextGoalOptions(
+      summariseBlock({ goal: 'first_continuous_run', currentWeek: 9 }, weeks, [finished()]),
+    );
     expect(calm.some((o) => o.goal === 'general_fitness')).toBe(true);
     expect(calm.find((o) => o.goal === 'five_k')?.recommended).toBe(true);
 
@@ -306,14 +362,18 @@ describe('generatePlan continuing from a finished block', () => {
   const continueFrom = { runSec: 540, walkSec: 60, reps: 2 };
 
   it('starts where the last block finished instead of halving it', () => {
-    const plan = generatePlan({ ...baseProfile, goal: 'five_k' }, breathBaseline, '2026-08-24', { continueFrom });
+    const plan = generatePlan({ ...baseProfile, goal: 'five_k' }, breathBaseline, '2026-08-24', {
+      continueFrom,
+    });
     expect(plan.weeks[0]!.runSec).toBe(540);
     expect(plan.weeks[0]!.walkSec).toBe(60);
     expect(plan.conservatismReasons[0]).toContain('where your last one finished');
   });
 
   it('still never grows weekly running time by more than 10%', () => {
-    const plan = generatePlan({ ...baseProfile, goal: 'ten_k' }, breathBaseline, '2026-08-24', { continueFrom });
+    const plan = generatePlan({ ...baseProfile, goal: 'ten_k' }, breathBaseline, '2026-08-24', {
+      continueFrom,
+    });
     plan.weeks.forEach((w, i) => {
       if (i === 0) return;
       const reference = [...plan.weeks.slice(0, i)].reverse().find((p) => !p.isDeload)!;
@@ -322,9 +382,14 @@ describe('generatePlan continuing from a finished block', () => {
   });
 
   it('holds the distance rather than building when the goal is already reached', () => {
-    const plan = generatePlan({ ...baseProfile, goal: 'general_fitness' }, breathBaseline, '2026-08-24', {
-      continueFrom: { runSec: 1800, walkSec: 60, reps: 1 },
-    });
+    const plan = generatePlan(
+      { ...baseProfile, goal: 'general_fitness' },
+      breathBaseline,
+      '2026-08-24',
+      {
+        continueFrom: { runSec: 1800, walkSec: 60, reps: 1 },
+      },
+    );
     expect(plan.weeks.length).toBeGreaterThanOrEqual(6);
     const building = plan.weeks.filter((w) => !w.isDeload);
     expect(new Set(building.map((w) => w.runSec)).size).toBe(1);

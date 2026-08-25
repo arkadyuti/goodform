@@ -71,7 +71,12 @@ function makeWeek(
 }
 
 /** A block that consolidates: the same week repeated, every fifth one lighter. */
-function maintenanceWeeks(runSec: number, walkSec: number, reps: number, count: number): PlanWeek[] {
+function maintenanceWeeks(
+  runSec: number,
+  walkSec: number,
+  reps: number,
+  count: number,
+): PlanWeek[] {
   const weeks: PlanWeek[] = [];
   for (let i = 1; i <= count; i++) {
     const deload = i % 5 === 0;
@@ -83,7 +88,7 @@ function maintenanceWeeks(runSec: number, walkSec: number, reps: number, count: 
         : makeWeek(i, runSec, walkSec, reps),
     );
   }
-  while (weeks.length > 1 && weeks[weeks.length - 1]!.isDeload) weeks.pop();
+  while (weeks.length > 1 && weeks[weeks.length - 1]?.isDeload) weeks.pop();
   return weeks;
 }
 
@@ -130,7 +135,7 @@ export function generatePlan(
       goal: profile.goal,
       conservatism,
       conservatismReasons: [
-        'You are already at this block\'s distance, so it holds you there rather than pushing further.',
+        "You are already at this block's distance, so it holds you there rather than pushing further.",
         ...reasons.slice(1),
       ],
       startDate,
@@ -142,7 +147,10 @@ export function generatePlan(
   let sinceDeload = 1;
 
   while (weeks.length < targetWeeks) {
-    const prev = weeks[weeks.length - 1]!;
+    const prev = weeks[weeks.length - 1];
+    // `weeks` is seeded with one week and only ever grows, so this cannot
+    // happen — but saying so beats asserting it away.
+    if (!prev) break;
     // A deload deliberately drops volume; progression resumes from the last
     // week that actually built, not from the lighter one.
     const reference = [...weeks].reverse().find((w) => !w.isDeload) ?? prev;
@@ -154,7 +162,13 @@ export function generatePlan(
       // interval, shorten the interval itself instead.
       const deload =
         prev.reps > 1
-          ? makeWeek(index, prev.runSec, prev.walkSec, Math.max(1, Math.round(prev.reps * 0.6)), true)
+          ? makeWeek(
+              index,
+              prev.runSec,
+              prev.walkSec,
+              Math.max(1, Math.round(prev.reps * 0.6)),
+              true,
+            )
           : makeWeek(index, Math.max(60, roundTo(prev.runSec * 0.6, 30)), prev.walkSec, 1, true);
       weeks.push(deload);
       sinceDeload = 0;
@@ -179,7 +193,11 @@ export function generatePlan(
       for (let candidateReps = reference.reps; candidateReps >= 1; candidateReps--) {
         const total = candidateRun * candidateReps * SESSIONS_PER_WEEK;
         if (total > cap) continue;
-        if (!best || total > best.totalRunSec || (total === best.totalRunSec && candidateRun > best.runSec)) {
+        if (
+          !best ||
+          total > best.totalRunSec ||
+          (total === best.totalRunSec && candidateRun > best.runSec)
+        ) {
           best = makeWeek(index, candidateRun, reference.walkSec, candidateReps);
         }
       }
@@ -193,7 +211,7 @@ export function generatePlan(
   }
 
   // A block should finish on a week that built something, not on a light one.
-  while (weeks.length > 1 && weeks[weeks.length - 1]!.isDeload) weeks.pop();
+  while (weeks.length > 1 && weeks[weeks.length - 1]?.isDeload) weeks.pop();
 
   return {
     goal: profile.goal,

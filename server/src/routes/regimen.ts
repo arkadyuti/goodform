@@ -18,7 +18,15 @@ import {
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
 import { dateRangeFrom, limitFrom, requireAuth, todayFrom, type AppEnv } from '../middleware.js';
-import { adjustSupply, loadActiveItems, loadAllItems, loadEvents, resolveReminder, toEvent, toItem } from '../regimen-store.js';
+import {
+  adjustSupply,
+  loadActiveItems,
+  loadAllItems,
+  loadEvents,
+  resolveReminder,
+  toEvent,
+  toItem,
+} from '../regimen-store.js';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -92,8 +100,12 @@ export const regimenRoutes = new Hono<AppEnv>()
     const problem = validate(parsed.data);
     if (problem) return c.json({ error: problem }, 400);
 
-    const [row] = await db.insert(schema.regimenItems).values(values(parsed.data, c.get('userId'))).returning();
-    return c.json({ item: toItem(row!) });
+    const [row] = await db
+      .insert(schema.regimenItems)
+      .values(values(parsed.data, c.get('userId')))
+      .returning();
+    if (!row) return c.json({ error: 'Could not save that item' }, 500);
+    return c.json({ item: toItem(row) });
   })
 
   .put('/items/:id', async (c) => {
@@ -105,7 +117,12 @@ export const regimenRoutes = new Hono<AppEnv>()
     const [row] = await db
       .update(schema.regimenItems)
       .set(values(parsed.data, c.get('userId')))
-      .where(and(eq(schema.regimenItems.userId, c.get('userId')), eq(schema.regimenItems.id, c.req.param('id'))))
+      .where(
+        and(
+          eq(schema.regimenItems.userId, c.get('userId')),
+          eq(schema.regimenItems.id, c.req.param('id')),
+        ),
+      )
       .returning();
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json({ item: toItem(row) });
@@ -113,12 +130,19 @@ export const regimenRoutes = new Hono<AppEnv>()
 
   /** Adds doses back to the packet, so a refill is one tap rather than a form. */
   .post('/items/:id/refill', async (c) => {
-    const parsed = z.object({ doses: z.number().int().min(0).max(10_000) }).safeParse(await c.req.json());
+    const parsed = z
+      .object({ doses: z.number().int().min(0).max(10_000) })
+      .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'Invalid refill' }, 400);
     const [row] = await db
       .update(schema.regimenItems)
       .set({ supplyCount: parsed.data.doses, updatedAt: new Date() })
-      .where(and(eq(schema.regimenItems.userId, c.get('userId')), eq(schema.regimenItems.id, c.req.param('id'))))
+      .where(
+        and(
+          eq(schema.regimenItems.userId, c.get('userId')),
+          eq(schema.regimenItems.id, c.req.param('id')),
+        ),
+      )
       .returning();
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json({ item: toItem(row) });
@@ -139,7 +163,11 @@ export const regimenRoutes = new Hono<AppEnv>()
       await db.delete(schema.regimenItems).where(where);
       return c.json({ ok: true, deleted: true });
     }
-    const [row] = await db.update(schema.regimenItems).set({ archivedAt: new Date() }).where(where).returning();
+    const [row] = await db
+      .update(schema.regimenItems)
+      .set({ archivedAt: new Date() })
+      .where(where)
+      .returning();
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true, item: toItem(row) });
   })
@@ -148,7 +176,12 @@ export const regimenRoutes = new Hono<AppEnv>()
     const [row] = await db
       .update(schema.regimenItems)
       .set({ archivedAt: null, updatedAt: new Date() })
-      .where(and(eq(schema.regimenItems.userId, c.get('userId')), eq(schema.regimenItems.id, c.req.param('id'))))
+      .where(
+        and(
+          eq(schema.regimenItems.userId, c.get('userId')),
+          eq(schema.regimenItems.id, c.req.param('id')),
+        ),
+      )
       .returning();
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json({ item: toItem(row) });
@@ -245,7 +278,11 @@ export const regimenRoutes = new Hono<AppEnv>()
     if (nowTaken && !wasTaken) await adjustSupply(input.itemId, -1);
     else if (!nowTaken && wasTaken) await adjustSupply(input.itemId, 1);
 
-    await resolveReminder(userId, 'regimen', input.reminderKey ?? `${input.itemId}:${input.dueDate}:${input.dueTime ?? ''}`);
+    await resolveReminder(
+      userId,
+      'regimen',
+      input.reminderKey ?? `${input.itemId}:${input.dueDate}:${input.dueTime ?? ''}`,
+    );
 
     return c.json({ ok: true, id: row.id });
   })
@@ -256,7 +293,12 @@ export const regimenRoutes = new Hono<AppEnv>()
     const [row] = await db
       .select()
       .from(schema.regimenEvents)
-      .where(and(eq(schema.regimenEvents.userId, userId), eq(schema.regimenEvents.id, c.req.param('id'))));
+      .where(
+        and(
+          eq(schema.regimenEvents.userId, userId),
+          eq(schema.regimenEvents.id, c.req.param('id')),
+        ),
+      );
     if (!row) return c.json({ ok: true });
     if (row.status === 'taken') await adjustSupply(row.itemId, 1);
     await db.delete(schema.regimenEvents).where(eq(schema.regimenEvents.id, row.id));
@@ -266,14 +308,22 @@ export const regimenRoutes = new Hono<AppEnv>()
   /** "Remind me in 30 minutes", straight from the notification. */
   .post('/snooze', async (c) => {
     const parsed = z
-      .object({ reminderKey: z.string().max(200), minutes: z.number().int().min(5).max(240).default(30) })
+      .object({
+        reminderKey: z.string().max(200),
+        minutes: z.number().int().min(5).max(240).default(30),
+      })
       .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'Invalid snooze' }, 400);
 
     const until = new Date(Date.now() + parsed.data.minutes * 60_000);
     await db
       .insert(schema.reminders)
-      .values({ userId: c.get('userId'), kind: 'regimen', key: parsed.data.reminderKey, snoozedUntil: until })
+      .values({
+        userId: c.get('userId'),
+        kind: 'regimen',
+        key: parsed.data.reminderKey,
+        snoozedUntil: until,
+      })
       .onConflictDoUpdate({
         target: [schema.reminders.userId, schema.reminders.kind, schema.reminders.key],
         set: { snoozedUntil: until, resolvedAt: null },

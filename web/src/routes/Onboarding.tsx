@@ -202,7 +202,7 @@ export function Onboarding() {
   const saveAndClose = async () => {
     await persistIfChanged();
     clearDraft(userId);
-    navigate('/');
+    void navigate('/');
   };
 
   const finishProfile = async () => {
@@ -251,7 +251,10 @@ export function Onboarding() {
             <span className="flex items-center gap-1">
               {stepIndex > 0 && (
                 <button
-                  onClick={() => jumpTo(ORDER[stepIndex - 1]!)}
+                  onClick={() => {
+                    const back = ORDER[stepIndex - 1];
+                    if (back) jumpTo(back);
+                  }}
                   className="tap px-2 text-[0.875rem] text-ink-faint hover:text-ink"
                 >
                   Back
@@ -784,7 +787,7 @@ export function Onboarding() {
             className="mt-6 py-3.5"
             onClick={() => {
               clearDraft(userId);
-              navigate('/');
+              void navigate('/');
             }}
           >
             Start

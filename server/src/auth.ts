@@ -71,6 +71,10 @@ export const auth = betterAuth({
          * Signing in still works normally for accounts that already exist —
          * this only decides who may make a new one.
          */
+        // `async` with nothing awaited: Better Auth types this hook as
+        // returning a promise, and throwing from an async function is what
+        // makes the refusal arrive as a rejection it can turn into a 403.
+        // eslint-disable-next-line @typescript-eslint/require-await
         before: async (user: { email?: string }) => {
           if (env.signupAllowlist.length === 0) return;
           const email = (user.email ?? '').toLowerCase();

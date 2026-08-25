@@ -16,8 +16,20 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     ...init,
   });
   if (!response.ok) {
-    const detail = await response.json().catch(() => ({}));
-    throw new ApiError(detail.error ?? detail.message ?? 'Something went wrong', response.status);
+    // The body is whatever the server sent, which on a proxy error or a
+    // truncated response is not JSON at all — so it is narrowed rather than
+    // trusted to have the shape we hope for.
+    const detail: unknown = await response.json().catch(() => null);
+    const message =
+      detail && typeof detail === 'object' && 'error' in detail && typeof detail.error === 'string'
+        ? detail.error
+        : detail &&
+            typeof detail === 'object' &&
+            'message' in detail &&
+            typeof detail.message === 'string'
+          ? detail.message
+          : 'Something went wrong';
+    throw new ApiError(message, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -66,11 +78,21 @@ export const api = {
 };
 
 export function startSyncWatcher(onSynced?: (count: number) => void): () => void {
-  const run = async () => {
-    const sent = await flush();
-    if (sent > 0) onSynced?.(sent);
+  // Wrapped rather than handed over directly: `addEventListener` and
+  // `setInterval` both discard what they are given back, so a rejection from a
+  // drain would have had nowhere to go and would surface only as an unhandled
+  // rejection in a console nobody has open.
+  const run = () => {
+    void (async () => {
+      try {
+        const sent = await flush();
+        if (sent > 0) onSynced?.(sent);
+      } catch (error) {
+        console.warn('Sync sweep failed; queued writes stay queued.', error);
+      }
+    })();
   };
-  void run();
+  run();
   window.addEventListener('online', run);
   const interval = window.setInterval(run, 60_000);
   return () => {

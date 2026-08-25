@@ -72,7 +72,7 @@ export class IntervalTimer {
   private locate(elapsed: number): { index: number; phaseElapsed: number } {
     let remaining = elapsed;
     for (let i = 0; i < this.intervals.length; i++) {
-      const duration = this.intervals[i]!.durationSec;
+      const duration = this.intervals[i]?.durationSec ?? 0;
       if (remaining < duration) return { index: i, phaseElapsed: remaining };
       remaining -= duration;
     }

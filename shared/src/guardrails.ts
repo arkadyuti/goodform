@@ -58,9 +58,9 @@ export function assessNutritionRisk(input: GuardrailInput): GuardrailAssessment 
   const weights = checks.filter((c) => daysBetween(c.date, input.today) <= 35);
 
   // --- 1. Weight coming off faster than tissue can be spared ---------------
-  if (weights.length >= 2) {
-    const newest = weights[0]!;
-    const oldest = weights[weights.length - 1]!;
+  const newest = weights[0];
+  const oldest = weights[weights.length - 1];
+  if (weights.length >= 2 && newest && oldest) {
     const days = daysBetween(oldest.date, newest.date);
     if (days >= 14) {
       const lost = oldest.weightKg! - newest.weightKg!;
@@ -82,7 +82,8 @@ export function assessNutritionRisk(input: GuardrailInput): GuardrailAssessment 
       signals.push({
         id: 'low_bmi',
         label: 'Body mass is on the low side',
-        detail: 'At this weight for your height, training adds load your body has little spare tissue to absorb. Targets that push intake down are the wrong tool here.',
+        detail:
+          'At this weight for your height, training adds load your body has little spare tissue to absorb. Targets that push intake down are the wrong tool here.',
       });
     }
   }
@@ -92,7 +93,7 @@ export function assessNutritionRisk(input: GuardrailInput): GuardrailAssessment 
     .filter(([date]) => daysBetween(date, input.today) <= 14)
     .map(([, grams]) => grams);
   const wayUnder = proteinDays.filter((g) => g > 0 && g < input.proteinTargetG * 0.5).length;
-  const losing = weights.length >= 2 && weights[0]!.weightKg! < weights[weights.length - 1]!.weightKg!;
+  const losing = weights.length >= 2 && (newest?.weightKg ?? 0) < (oldest?.weightKg ?? 0);
   if (proteinDays.length >= 8 && wayUnder >= 8 && losing) {
     signals.push({
       id: 'sustained_undereating',

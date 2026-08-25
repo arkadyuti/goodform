@@ -99,7 +99,11 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
 
   const discomfort = runs
     .filter((s) => s.discomfort)
-    .map((s) => ({ date: s.date, location: s.discomfort!.location, severity: s.discomfort!.severity as number }))
+    .map((s) => ({
+      date: s.date,
+      location: s.discomfort!.location,
+      severity: s.discomfort!.severity,
+    }))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 
   const sum = (logs: ReviewLogSlice[], key: 'cigarettes' | 'beers' | 'alcoholUnits') =>
@@ -113,13 +117,18 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
   const habits = {
     loggedDays: input.logs.length,
     waterAvgMl: mean(input.logs.map((l) => l.waterMl).filter((n) => n > 0)),
-    sleepAvgHours: mean(input.logs.map((l) => l.sleepHours).filter((n): n is number => n !== null && n > 0)),
+    sleepAvgHours: mean(
+      input.logs.map((l) => l.sleepHours).filter((n): n is number => n !== null && n > 0),
+    ),
     cigarettes,
     beers,
     alcoholUnits,
     clearDays,
     cigarettesDelta: cigarettes - sum(input.previousLogs, 'cigarettes'),
-    drinksDelta: beers + alcoholUnits - (sum(input.previousLogs, 'beers') + sum(input.previousLogs, 'alcoholUnits')),
+    drinksDelta:
+      beers +
+      alcoholUnits -
+      (sum(input.previousLogs, 'beers') + sum(input.previousLogs, 'alcoholUnits')),
   };
 
   const proteinDays = dateRange(input.from, input.to)
@@ -152,16 +161,27 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
       `Your longest unbroken interval went from ${Math.round(input.previousLongestRunSec / 60)} to ${Math.round(longestRunSec / 60)} minutes.`,
     );
   }
-  if (measurements?.waistDelta !== null && measurements?.waistDelta !== undefined && measurements.waistDelta < 0) {
-    const steadyWeight = measurements.weightDelta !== null && Math.abs(measurements.weightDelta) < 0.5;
+  if (
+    measurements?.waistDelta !== null &&
+    measurements?.waistDelta !== undefined &&
+    measurements.waistDelta < 0
+  ) {
+    const steadyWeight =
+      measurements.weightDelta !== null && Math.abs(measurements.weightDelta) < 0.5;
     notes.push(
       steadyWeight
         ? `Waist down ${Math.abs(measurements.waistDelta)} cm with weight holding steady — that is muscle arriving while fat leaves, and it is the result to want.`
         : `Waist down ${Math.abs(measurements.waistDelta)} cm.`,
     );
   }
-  if (measurements?.restingHrDelta !== null && measurements?.restingHrDelta !== undefined && measurements.restingHrDelta <= -2) {
-    notes.push(`Resting heart rate down ${Math.abs(measurements.restingHrDelta)} bpm. That is the aerobic base building.`);
+  if (
+    measurements?.restingHrDelta !== null &&
+    measurements?.restingHrDelta !== undefined &&
+    measurements.restingHrDelta <= -2
+  ) {
+    notes.push(
+      `Resting heart rate down ${Math.abs(measurements.restingHrDelta)} bpm. That is the aerobic base building.`,
+    );
   }
 
   const repeated = repeatedSite(discomfort);
@@ -171,20 +191,36 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
     );
   }
 
-  if (habits.cigarettesDelta < 0) notes.push(`${Math.abs(habits.cigarettesDelta)} fewer cigarettes than last week.`);
-  if (habits.clearDays >= 5 && habits.loggedDays >= 5) notes.push(`${habits.clearDays} clear days.`);
+  if (habits.cigarettesDelta < 0)
+    notes.push(`${Math.abs(habits.cigarettesDelta)} fewer cigarettes than last week.`);
+  if (habits.clearDays >= 5 && habits.loggedDays >= 5)
+    notes.push(`${habits.clearDays} clear days.`);
   if (habits.sleepAvgHours !== null && habits.sleepAvgHours < 6.5) {
-    notes.push('Sleep averaged under six and a half hours. Tendon repair happens there, not on the run.');
+    notes.push(
+      'Sleep averaged under six and a half hours. Tendon repair happens there, not on the run.',
+    );
   }
-  if (input.regimen && input.regimen.due > 0 && input.regimen.rate !== null && input.regimen.rate >= 0.9) {
+  if (
+    input.regimen &&
+    input.regimen.due > 0 &&
+    input.regimen.rate !== null &&
+    input.regimen.rate >= 0.9
+  ) {
     notes.push(`${Math.round(input.regimen.rate * 100)}% of your doses ticked off.`);
   }
 
   return {
     from: input.from,
     to: input.to,
-    runs: { completed: completedRuns.length, attempted: attemptedRuns.length, planned: input.plannedRuns },
-    strength: { completed: strength.filter((s) => s.completion === 'full').length, planned: input.plannedStrength },
+    runs: {
+      completed: completedRuns.length,
+      attempted: attemptedRuns.length,
+      planned: input.plannedRuns,
+    },
+    strength: {
+      completed: strength.filter((s) => s.completion === 'full').length,
+      planned: input.plannedStrength,
+    },
     longestRunSec,
     longestRunDeltaSec: longestRunSec - input.previousLongestRunSec,
     totalRunSec,
@@ -193,14 +229,17 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
     protein,
     measurements,
     regimen: input.regimen,
-    headline: headlineFor(completedRuns.length, attemptedRuns.length, input.plannedRuns, discomfort),
+    headline: headlineFor(
+      completedRuns.length,
+      attemptedRuns.length,
+      input.plannedRuns,
+      discomfort,
+    ),
     notes,
   };
 }
 
-function repeatedSite(
-  discomfort: { location: DiscomfortLocation }[],
-): DiscomfortLocation | null {
+function repeatedSite(discomfort: { location: DiscomfortLocation }[]): DiscomfortLocation | null {
   const counts = new Map<DiscomfortLocation, number>();
   for (const entry of discomfort) counts.set(entry.location, (counts.get(entry.location) ?? 0) + 1);
   for (const [site, count] of counts) if (count >= 2) return site;

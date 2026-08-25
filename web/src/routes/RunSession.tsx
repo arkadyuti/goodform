@@ -92,7 +92,7 @@ export function RunSession() {
               durationSec: Math.round(elapsedAtFinish),
               ...input,
             });
-            navigate('/');
+            void navigate('/');
           }}
         />
       )}

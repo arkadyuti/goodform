@@ -6,7 +6,9 @@ import { pending } from '../lib/offline.ts';
  * waiting to sync. Silence would leave the runner unsure their log was kept.
  */
 export function ConnectionState() {
-  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+  const [online, setOnline] = useState(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine,
+  );
   const [queued, setQueued] = useState(0);
 
   useEffect(() => {
@@ -15,8 +17,14 @@ export function ConnectionState() {
     window.addEventListener('online', up);
     window.addEventListener('offline', down);
 
-    const check = async () => setQueued((await pending()).length);
-    void check();
+    const check = () => {
+      void pending()
+        .then((writes) => setQueued(writes.length))
+        .catch(() => {
+          /* IndexedDB unavailable — the badge simply does not update. */
+        });
+    };
+    check();
     const interval = window.setInterval(check, 4000);
 
     return () => {

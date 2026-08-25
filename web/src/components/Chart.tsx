@@ -13,7 +13,7 @@ function useWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => entry && setWidth(entry.contentRect.width));
     observer.observe(element);
     setWidth(element.clientWidth);
     return () => observer.disconnect();
@@ -26,7 +26,8 @@ function ticksFor(min: number, max: number, count = 3): number[] {
   if (max === min) return [min];
   const rough = (max - min) / count;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? magnitude * 10;
+  const step =
+    [1, 2, 2.5, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? magnitude * 10;
   const first = Math.ceil(min / step) * step;
   const out: number[] = [];
   for (let t = first; t <= max + 1e-9; t += step) out.push(Number(t.toFixed(6)));
@@ -87,7 +88,8 @@ export function TrendChart({
     const plotHeight = HEIGHT - PADDING.top - PADDING.bottom;
     const x = (i: number) =>
       PADDING.left + (sorted.length === 1 ? plotWidth / 2 : (i / (sorted.length - 1)) * plotWidth);
-    const y = (value: number) => PADDING.top + plotHeight - ((value - min) / (max - min || 1)) * plotHeight;
+    const y = (value: number) =>
+      PADDING.top + plotHeight - ((value - min) / (max - min || 1)) * plotHeight;
 
     return { min, max, x, y, plotHeight, ticks: ticksFor(min, max) };
   }, [sorted, width, zeroBased]);
@@ -100,7 +102,9 @@ export function TrendChart({
 
   const summary = last
     ? `${title}: ${formatValue(last.value, unit)} on ${shortDate(last.date)}${
-        change !== null ? `, ${change > 0 ? 'up' : 'down'} ${formatValue(Math.abs(change), unit)} across ${sorted.length} readings` : ''
+        change !== null
+          ? `, ${change > 0 ? 'up' : 'down'} ${formatValue(Math.abs(change), unit)} across ${sorted.length} readings`
+          : ''
       }.`
     : `${title}: ${empty}`;
 
@@ -113,7 +117,11 @@ export function TrendChart({
             <p className="tabular text-[0.8125rem] text-ink-soft">
               {formatValue(last.value, unit)}
               {change !== null && change !== 0 && (
-                <span className={good === null ? 'text-ink-faint' : good ? 'text-good' : 'text-walk-deep'}>
+                <span
+                  className={
+                    good === null ? 'text-ink-faint' : good ? 'text-good' : 'text-walk-deep'
+                  }
+                >
                   {' '}
                   {change > 0 ? '↑' : '↓'} {formatValue(Math.abs(change), '')}
                 </span>
@@ -140,7 +148,8 @@ export function TrendChart({
                 const px = event.clientX - box.left;
                 let nearest = 0;
                 for (let i = 1; i < sorted.length; i++) {
-                  if (Math.abs(geometry.x(i) - px) < Math.abs(geometry.x(nearest) - px)) nearest = i;
+                  if (Math.abs(geometry.x(i) - px) < Math.abs(geometry.x(nearest) - px))
+                    nearest = i;
                 }
                 setActive(nearest);
               }}
@@ -175,7 +184,9 @@ export function TrendChart({
                     d={`M ${geometry.x(0)} ${geometry.y(sorted[0]!.value)} ${sorted
                       .slice(1)
                       .map((p, i) => `L ${geometry.x(i + 1)} ${geometry.y(p.value)}`)
-                      .join(' ')} L ${geometry.x(sorted.length - 1)} ${PADDING.top + geometry.plotHeight} L ${geometry.x(0)} ${PADDING.top + geometry.plotHeight} Z`}
+                      .join(
+                        ' ',
+                      )} L ${geometry.x(sorted.length - 1)} ${PADDING.top + geometry.plotHeight} L ${geometry.x(0)} ${PADDING.top + geometry.plotHeight} Z`}
                     fill="var(--color-run)"
                     opacity="0.1"
                   />
@@ -218,7 +229,7 @@ export function TrendChart({
                   />
                   <circle
                     cx={geometry.x(active)}
-                    cy={geometry.y(sorted[active]!.value)}
+                    cy={geometry.y(sorted[active].value)}
                     r="4"
                     fill="var(--color-run)"
                     stroke="var(--color-paper)"
@@ -231,7 +242,7 @@ export function TrendChart({
                     textAnchor={active > sorted.length / 2 ? 'end' : 'start'}
                     fill="var(--color-ink)"
                   >
-                    {formatValue(sorted[active]!.value, unit)} · {shortDate(sorted[active]!.date)}
+                    {formatValue(sorted[active].value, unit)} · {shortDate(sorted[active].date)}
                   </text>
                 </g>
               )}
@@ -313,13 +324,16 @@ export function DiscomfortChart({ points }: { points: DiscomfortPoint[] }) {
     return (
       <figure className="m-0">
         <figcaption className="eyebrow">Discomfort</figcaption>
-        <p className="mt-2 leading-snug text-ink-soft">Nothing logged. That is the outcome we are after.</p>
+        <p className="mt-2 leading-snug text-ink-soft">
+          Nothing logged. That is the outcome we are after.
+        </p>
       </figure>
     );
   }
 
   const plotWidth = Math.max(1, width - PADDING.left - PADDING.right);
   const plotHeight = HEIGHT - PADDING.top - PADDING.bottom;
+  // `sorted` is non-empty here; callers render nothing for an empty series.
   const firstDate = sorted[0]!.date;
   const lastDate = sorted[sorted.length - 1]!.date;
   const span = Date.parse(`${lastDate}T12:00:00Z`) - Date.parse(`${firstDate}T12:00:00Z`);
@@ -328,7 +342,9 @@ export function DiscomfortChart({ points }: { points: DiscomfortPoint[] }) {
   const x = (date: string) =>
     span === 0
       ? PADDING.left + plotWidth / 2
-      : PADDING.left + ((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${firstDate}T12:00:00Z`)) / span) * plotWidth;
+      : PADDING.left +
+        ((Date.parse(`${date}T12:00:00Z`) - Date.parse(`${firstDate}T12:00:00Z`)) / span) *
+          plotWidth;
   const y = (severity: number) => PADDING.top + plotHeight - ((severity - 0.5) / 5) * plotHeight;
 
   return (
@@ -336,8 +352,8 @@ export function DiscomfortChart({ points }: { points: DiscomfortPoint[] }) {
       <figcaption>
         <p className="eyebrow">Discomfort</p>
         <p className="mt-1 text-[0.8125rem] leading-snug text-ink-soft">
-          The same place appearing repeatedly is the earliest warning of an overuse injury — earlier than pain
-          that stops you.
+          The same place appearing repeatedly is the earliest warning of an overuse injury — earlier
+          than pain that stops you.
         </p>
       </figcaption>
 
@@ -388,20 +404,27 @@ export function DiscomfortChart({ points }: { points: DiscomfortPoint[] }) {
 
             {active !== null && sorted[active] && (
               <text
-                x={Math.min(width - PADDING.right, Math.max(PADDING.left, x(sorted[active]!.date)))}
+                x={Math.min(width - PADDING.right, Math.max(PADDING.left, x(sorted[active].date)))}
                 y={PADDING.top - 3}
                 fontSize="11"
-                textAnchor={x(sorted[active]!.date) > width / 2 ? 'end' : 'start'}
+                textAnchor={x(sorted[active].date) > width / 2 ? 'end' : 'start'}
                 fill="var(--color-ink)"
               >
-                {sorted[active]!.location} · {sorted[active]!.severity} of 5 · {shortDate(sorted[active]!.date)}
+                {sorted[active].location} · {sorted[active].severity} of 5 ·{' '}
+                {shortDate(sorted[active].date)}
               </text>
             )}
 
             <text x={PADDING.left} y={HEIGHT - 6} fontSize="11" fill="var(--color-ink-faint)">
               {shortDate(firstDate)}
             </text>
-            <text x={width - PADDING.right} y={HEIGHT - 6} fontSize="11" textAnchor="end" fill="var(--color-ink-faint)">
+            <text
+              x={width - PADDING.right}
+              y={HEIGHT - 6}
+              fontSize="11"
+              textAnchor="end"
+              fill="var(--color-ink-faint)"
+            >
               {shortDate(lastDate)}
             </text>
           </svg>
@@ -424,9 +447,13 @@ export function DiscomfortChart({ points }: { points: DiscomfortPoint[] }) {
         <ul className="mt-1.5 flex flex-col gap-1.5">
           {[...sorted].reverse().map((entry, i) => (
             <li key={i} className="flex items-center gap-3 text-[0.875rem]">
-              <span className="w-14 shrink-0 text-[0.8125rem] text-ink-faint">{shortDate(entry.date)}</span>
+              <span className="w-14 shrink-0 text-[0.8125rem] text-ink-faint">
+                {shortDate(entry.date)}
+              </span>
               <span className="w-16 shrink-0 capitalize">{entry.location}</span>
-              <span className={entry.severity >= 4 ? 'text-alert' : 'text-walk-deep'}>{entry.severity} of 5</span>
+              <span className={entry.severity >= 4 ? 'text-alert' : 'text-walk-deep'}>
+                {entry.severity} of 5
+              </span>
             </li>
           ))}
         </ul>
@@ -457,7 +484,9 @@ export function AdherenceStrip({
               : day.skipped > 0
                 ? 'bg-walk/50'
                 : 'bg-chalk-deep';
-        return <span key={day.date} className={`h-5 flex-1 rounded-[2px] ${tone}`} title={day.date} />;
+        return (
+          <span key={day.date} className={`h-5 flex-1 rounded-[2px] ${tone}`} title={day.date} />
+        );
       })}
     </div>
   );

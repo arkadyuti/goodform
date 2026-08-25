@@ -183,29 +183,36 @@ export const planRoutes = new Hono<AppEnv>()
       .set({ status: 'abandoned' })
       .where(and(eq(schema.plans.userId, userId), eq(schema.plans.status, 'active')));
 
-    const [plan] = await db
-      .insert(schema.plans)
-      .values({
-        userId,
-        goal: generated.goal,
-        conservatism: generated.conservatism,
-        conservatismReasons: generated.conservatismReasons,
-        startDate,
-      })
-      .returning();
+    // One transaction: a plan without its weeks is not a lesser plan, it is a
+    // broken one — every screen that reads `weeks[weeks.length - 1]` throws on
+    // it, and nothing in the app can repair it.
+    const plan = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.plans)
+        .values({
+          userId,
+          goal: generated.goal,
+          conservatism: generated.conservatism,
+          conservatismReasons: generated.conservatismReasons,
+          startDate,
+        })
+        .returning();
+      if (!created) throw new Error('Plan insert returned no row');
 
-    await db.insert(schema.planWeeks).values(
-      generated.weeks.map((w) => ({
-        planId: plan!.id,
-        index: w.index,
-        runSec: w.runSec,
-        walkSec: w.walkSec,
-        reps: w.reps,
-        sessionsPerWeek: w.sessionsPerWeek,
-        isDeload: w.isDeload,
-        totalRunSec: w.totalRunSec,
-      })),
-    );
+      await tx.insert(schema.planWeeks).values(
+        generated.weeks.map((w) => ({
+          planId: created.id,
+          index: w.index,
+          runSec: w.runSec,
+          walkSec: w.walkSec,
+          reps: w.reps,
+          sessionsPerWeek: w.sessionsPerWeek,
+          isDeload: w.isDeload,
+          totalRunSec: w.totalRunSec,
+        })),
+      );
+      return created;
+    });
 
     return c.json({ plan, weeks: generated.weeks });
   })
@@ -270,7 +277,8 @@ export const planRoutes = new Hono<AppEnv>()
     const current = await activePlan(userId);
     if (!current) return c.json({ error: 'No active plan' }, 404);
     const { plan, weeks } = current;
-    const last = weeks[weeks.length - 1]!.index;
+    const last = weeks[weeks.length - 1]?.index;
+    if (last === undefined) return c.json({ error: 'This plan has no weeks' }, 409);
 
     switch (parsed.data.action) {
       case 'advance': {
@@ -460,7 +468,7 @@ export const planRoutes = new Hono<AppEnv>()
               stopReason: parsed.data.baseline.stopReason,
             })
             .returning()
-        )[0]!
+        )[0]
       : (
           await db
             .select()
@@ -484,38 +492,44 @@ export const planRoutes = new Hono<AppEnv>()
       continueFrom ? { continueFrom } : {},
     );
 
-    // The block that just ended is finished, not abandoned — it is the record
-    // of what was actually done.
-    if (previous && previous.status === 'active') {
-      await db
-        .update(schema.plans)
-        .set({ status: 'completed' })
-        .where(eq(schema.plans.id, previous.id));
-    }
+    // Closing the old block and opening the new one are one change. Half of it
+    // leaves either two active plans or a plan with no weeks.
+    const plan = await db.transaction(async (tx) => {
+      // The block that just ended is finished, not abandoned — it is the record
+      // of what was actually done.
+      if (previous && previous.status === 'active') {
+        await tx
+          .update(schema.plans)
+          .set({ status: 'completed' })
+          .where(eq(schema.plans.id, previous.id));
+      }
 
-    const [plan] = await db
-      .insert(schema.plans)
-      .values({
-        userId,
-        goal: generated.goal,
-        conservatism: generated.conservatism,
-        conservatismReasons: generated.conservatismReasons,
-        startDate,
-      })
-      .returning();
+      const [created] = await tx
+        .insert(schema.plans)
+        .values({
+          userId,
+          goal: generated.goal,
+          conservatism: generated.conservatism,
+          conservatismReasons: generated.conservatismReasons,
+          startDate,
+        })
+        .returning();
+      if (!created) throw new Error('Plan insert returned no row');
 
-    await db.insert(schema.planWeeks).values(
-      generated.weeks.map((w) => ({
-        planId: plan!.id,
-        index: w.index,
-        runSec: w.runSec,
-        walkSec: w.walkSec,
-        reps: w.reps,
-        sessionsPerWeek: w.sessionsPerWeek,
-        isDeload: w.isDeload,
-        totalRunSec: w.totalRunSec,
-      })),
-    );
+      await tx.insert(schema.planWeeks).values(
+        generated.weeks.map((w) => ({
+          planId: created.id,
+          index: w.index,
+          runSec: w.runSec,
+          walkSec: w.walkSec,
+          reps: w.reps,
+          sessionsPerWeek: w.sessionsPerWeek,
+          isDeload: w.isDeload,
+          totalRunSec: w.totalRunSec,
+        })),
+      );
+      return created;
+    });
 
     return c.json({ plan, weeks: generated.weeks });
   })

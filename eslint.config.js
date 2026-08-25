@@ -18,6 +18,37 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
+  // Type-aware rules, where the type checker can see the whole program. These
+  // are the ones that catch what review misses: a promise nobody awaited, an
+  // async function handed to something expecting void, a value read off an
+  // unchecked `any`. Server and shared first — no JSX, so the fallout is
+  // tractable; web joins them below with the noisiest rules relaxed.
+  {
+    files: ['server/**/*.ts', 'shared/**/*.ts', 'web/**/*.{ts,tsx}'],
+    extends: [...tseslint.configs.recommendedTypeChecked],
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      // React event props are typed `() => void`, so every `onClick={async …}`
+      // trips this. Flagging all of them would drown the rule's real finds —
+      // an async callback handed to `setTimeout`, `forEach`, or anywhere the
+      // caller sequences on the return value. The risk that matters here is an
+      // unhandled rejection, and `MutationCache.onError` in main.tsx catches
+      // that at runtime for every mutation, which lint cannot do.
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { attributes: false } },
+      ],
+    },
+  },
+
+  // Config files belong to no tsconfig, so type-aware rules cannot run on them.
+  {
+    files: ['**/*.config.{ts,js,mjs}'],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
+
   {
     rules: {
       // Unused names are an error, but a leading underscore marks one that is

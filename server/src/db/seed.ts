@@ -5,7 +5,7 @@ const rows = FOOD_LIBRARY.map((f) => ({
   id: f.id,
   name: f.name,
   locale: f.locale,
-  dietaryTags: f.dietaryTags as string[],
+  dietaryTags: f.dietaryTags,
   servingLabel: f.servingLabel,
   proteinG: f.proteinG,
   ownerId: null,

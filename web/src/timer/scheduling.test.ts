@@ -40,8 +40,8 @@ describe('timer scheduling', () => {
     // not cancel its sibling, the number of live callbacks doubles every round.
     vi.useFakeTimers();
     const original = globalThis.requestAnimationFrame;
-    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-      setTimeout(() => cb(0), 16) as unknown as number) as typeof requestAnimationFrame;
+    globalThis.requestAnimationFrame = (cb: FrameRequestCallback) =>
+      setTimeout(() => cb(0), 16) as unknown as number;
 
     const timer = new IntervalTimer([{ phase: 'run', durationSec: 60, rep: 1 }], handlers());
     timer.start();

@@ -21,7 +21,7 @@ export function Login() {
     setError(null);
     const result =
       mode === 'signup'
-        ? await signUp.email({ email, password, name: name || email.split('@')[0]! })
+        ? await signUp.email({ email, password, name: name || email.split('@')[0] || email })
         : await signIn.email({ email, password });
     setBusy(false);
     if (result.error)

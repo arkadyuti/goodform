@@ -43,15 +43,21 @@ function monthStart(date: string): string {
   return `${date.slice(0, 7)}-01`;
 }
 
-function monthEnd(date: string): string {
+/** `2026-08-25` → `[2026, 8]`. The caller always holds a real date string. */
+function yearMonth(date: string): [number, number] {
   const [year, month] = date.split('-').map(Number);
+  return [year ?? 1970, month ?? 1];
+}
+
+function monthEnd(date: string): string {
+  const [year, month] = yearMonth(date);
   // Day 0 of the next month is the last day of this one.
-  return new Date(Date.UTC(year!, month!, 0)).toISOString().slice(0, 10);
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 }
 
 function addMonths(date: string, delta: number): string {
-  const [year, month] = date.split('-').map(Number);
-  return `${new Date(Date.UTC(year!, month! - 1 + delta, 1)).toISOString().slice(0, 7)}-01`;
+  const [year, month] = yearMonth(date);
+  return `${new Date(Date.UTC(year, month - 1 + delta, 1)).toISOString().slice(0, 7)}-01`;
 }
 
 function monthLabel(date: string): string {

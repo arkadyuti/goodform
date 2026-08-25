@@ -98,7 +98,7 @@ export const TIME_BANDS: { id: TimeBandId; label: string; from: number }[] = [
 export function bandFor(time: string): TimeBandId {
   const minutes = minutesOfDay(time);
   // Anything before 04:00 belongs to the night that has not ended yet.
-  if (minutes < TIME_BANDS[0]!.from) return 'night';
+  if (minutes < (TIME_BANDS[0]?.from ?? 0)) return 'night';
   let band: TimeBandId = 'morning';
   for (const candidate of TIME_BANDS) if (minutes >= candidate.from) band = candidate.id;
   return band;
@@ -133,7 +133,8 @@ export function isDueOn(item: RegimenItem, date: string): boolean {
       return item.weekdays.includes(weekdayOf(date));
     case 'interval': {
       const step = Math.max(1, item.intervalDays);
-      const start = item.courseStart && item.courseStart > item.anchorDate ? item.courseStart : item.anchorDate;
+      const start =
+        item.courseStart && item.courseStart > item.anchorDate ? item.courseStart : item.anchorDate;
       return daysBetween(start, date) % step === 0;
     }
   }
@@ -148,7 +149,10 @@ export function dosesOn(items: RegimenItem[], date: string): DueDose[] {
       doses.push({ item, dueDate: date, dueTime: time, band: bandFor(time) });
     }
   }
-  return doses.sort((a, b) => minutesOfDay(a.dueTime) - minutesOfDay(b.dueTime) || a.item.name.localeCompare(b.item.name));
+  return doses.sort(
+    (a, b) =>
+      minutesOfDay(a.dueTime) - minutesOfDay(b.dueTime) || a.item.name.localeCompare(b.item.name),
+  );
 }
 
 export interface DoseState extends DueDose {
@@ -180,7 +184,9 @@ export function doseStates(
 }
 
 /** Grouped for display: bands in day order, each with its doses. */
-export function groupByBand(doses: DoseState[]): { band: TimeBandId; label: string; doses: DoseState[] }[] {
+export function groupByBand(
+  doses: DoseState[],
+): { band: TimeBandId; label: string; doses: DoseState[] }[] {
   const groups = new Map<TimeBandId, DoseState[]>();
   for (const dose of doses) {
     const list = groups.get(dose.band) ?? [];
@@ -272,7 +278,10 @@ const ABSORPTION_RULES: { id: string; match: RegExp; text: string }[] = [
 /** Notes worth surfacing at logging time for this item. Usually none. */
 export function absorptionNotes(item: Pick<RegimenItem, 'name' | 'notes'>): AbsorptionNote[] {
   const haystack = `${item.name} ${item.notes ?? ''}`;
-  return ABSORPTION_RULES.filter((rule) => rule.match.test(haystack)).map(({ id, text }) => ({ id, text }));
+  return ABSORPTION_RULES.filter((rule) => rule.match.test(haystack)).map(({ id, text }) => ({
+    id,
+    text,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +309,9 @@ export function adherenceFor(
   to: string,
 ): Adherence {
   const logged = new Map(
-    events.filter((e) => e.itemId === item.id).map((e) => [eventKey(e.itemId, e.dueDate, e.dueTime), e.status]),
+    events
+      .filter((e) => e.itemId === item.id)
+      .map((e) => [eventKey(e.itemId, e.dueDate, e.dueTime), e.status]),
   );
   let due = 0;
   let taken = 0;
@@ -316,7 +327,13 @@ export function adherenceFor(
     }
   }
 
-  return { due, taken, skipped, missed: due - taken - skipped, rate: due === 0 ? null : taken / due };
+  return {
+    due,
+    taken,
+    skipped,
+    missed: due - taken - skipped,
+    rate: due === 0 ? null : taken / due,
+  };
 }
 
 /** How an item is described in a list, without repeating its name. */
@@ -327,7 +344,10 @@ export function scheduleSummary(item: RegimenItem): string {
     case 'daily':
       return times ? `Every day · ${times}` : 'Every day';
     case 'weekdays': {
-      const days = [...item.weekdays].sort().map((d) => DAY_NAMES[d]).join(' ');
+      const days = [...item.weekdays]
+        .sort()
+        .map((d) => DAY_NAMES[d])
+        .join(' ');
       return times ? `${days} · ${times}` : days;
     }
     case 'interval': {

@@ -60,7 +60,7 @@ export function StrengthSession() {
         effort: null,
         discomfort: null,
       });
-      navigate('/');
+      void navigate('/');
     } catch {
       // Without this the button stayed on "Saving" for ever and the work was
       // gone, with the failure visible only in a console nobody has open.

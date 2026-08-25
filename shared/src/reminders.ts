@@ -214,7 +214,7 @@ export function dueReminders(context: ReminderContext): DueReminder[] {
         (record?.attempts ?? 0) === 0 && inWindow(dose.dueTime, localTime, CATCH_UP_MINUTES);
 
       if ((firstNudge || resumingSnooze) && mayInterrupt) {
-        const attempt = resumingSnooze ? Math.max(1, record!.attempts) : 1;
+        const attempt = resumingSnooze ? Math.max(1, record.attempts) : 1;
         out.push({
           kind: 'regimen',
           key,

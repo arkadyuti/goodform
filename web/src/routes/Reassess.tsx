@@ -21,7 +21,8 @@ export function Reassess() {
   const [stopReason, setStopReason] = useState<StopReason | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (isPending) return <div className="min-h-[60dvh]" aria-busy="true" aria-label="Loading your block" />;
+  if (isPending)
+    return <div className="min-h-[60dvh]" aria-busy="true" aria-label="Loading your block" />;
   if (isError || !data) {
     return (
       <div className="pt-6">
@@ -42,7 +43,7 @@ export function Reassess() {
         goal: chosen,
         baseline: needsBaseline ? { minutesRun: Number(minutes), stopReason: stopReason! } : null,
       });
-      navigate('/plan');
+      void navigate('/plan');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not build the next block.');
     }
@@ -63,21 +64,24 @@ export function Reassess() {
           <Stat value={outcome.runsCompleted} label="runs finished" />
           <Stat value={outcome.weeksCompleted} label={`of ${outcome.weeksPlanned} weeks`} />
           {outcome.totalRepeats > 0 && (
-            <Stat value={outcome.totalRepeats} label={outcome.totalRepeats === 1 ? 'week repeated' : 'weeks repeated'} />
+            <Stat
+              value={outcome.totalRepeats}
+              label={outcome.totalRepeats === 1 ? 'week repeated' : 'weeks repeated'}
+            />
           )}
         </div>
         {outcome.totalRepeats > 0 && (
           <p className="mt-3 text-[0.875rem] leading-relaxed text-ink-soft">
-            Repeating is the plan waiting for your legs, which is what it is for. It counts as progress, not as
-            time lost.
+            Repeating is the plan waiting for your legs, which is what it is for. It counts as
+            progress, not as time lost.
           </p>
         )}
       </Card>
 
       {outcome.worstDiscomfort >= 4 && (
         <Note tone="alert">
-          You logged discomfort at 4 or above during this block. Holding at the same distance for another block
-          is the recommendation here — and it is still your call.
+          You logged discomfort at 4 or above during this block. Holding at the same distance for
+          another block is the recommendation here — and it is still your call.
         </Note>
       )}
 
@@ -144,9 +148,21 @@ export function Reassess() {
                     value={stopReason ? [stopReason] : []}
                     onChange={([v]) => v && setStopReason(v)}
                     options={[
-                      { value: 'breath' as const, label: 'Out of breath', hint: 'Lungs adapt in weeks.' },
-                      { value: 'legs' as const, label: 'Legs gave out', hint: 'Tissue adapts in months — the plan slows down.' },
-                      { value: 'choice' as const, label: 'I chose to stop', hint: 'There was more in the tank.' },
+                      {
+                        value: 'breath' as const,
+                        label: 'Out of breath',
+                        hint: 'Lungs adapt in weeks.',
+                      },
+                      {
+                        value: 'legs' as const,
+                        label: 'Legs gave out',
+                        hint: 'Tissue adapts in months — the plan slows down.',
+                      },
+                      {
+                        value: 'choice' as const,
+                        label: 'I chose to stop',
+                        hint: 'There was more in the tank.',
+                      },
                     ]}
                   />
                 </div>
@@ -156,14 +172,19 @@ export function Reassess() {
         </Card>
       ) : (
         <Note>
-          The next block picks up from the {outcome.achievedMinutes}-minute interval you finished on, not from
-          scratch. Nothing you built is thrown away.
+          The next block picks up from the {outcome.achievedMinutes}-minute interval you finished
+          on, not from scratch. Nothing you built is thrown away.
         </Note>
       )}
 
       {error && <Note tone="alert">{error}</Note>}
 
-      <Button full className="py-3.5" disabled={!chosen || !baselineReady || reassess.isPending} onClick={start}>
+      <Button
+        full
+        className="py-3.5"
+        disabled={!chosen || !baselineReady || reassess.isPending}
+        onClick={start}
+      >
         Build the next block
       </Button>
 
