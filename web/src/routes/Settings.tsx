@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { minutesOfDay, timeFromMinutes, withinWindow } from '@goodform/shared';
+import {
+  WEEKDAY_NAMES,
+  daysFor,
+  hasBackToBackRuns,
+  listDays,
+  minutesOfDay,
+  timeFromMinutes,
+  withinWindow,
+} from '@goodform/shared';
 import {
   useDeleteAccount,
   useResetData,
@@ -229,6 +237,8 @@ export function SettingsView() {
       )}
 
       <RemindersCard settings={settings} />
+
+      <TrainingDaysCard settings={settings} onSave={(next) => save.mutate(next)} />
 
       <Card>
         <Eyebrow>Around a session</Eyebrow>
@@ -762,6 +772,118 @@ function DeleteAccountCard({ email }: { email: string }) {
           Keep it
         </Button>
       </div>
+    </Card>
+  );
+}
+
+/**
+ * Which days the week is built around.
+ *
+ * The rhythm used to be fixed at Mon/Wed/Sat and Tue/Fri, stated nowhere and
+ * changeable nowhere — so someone who works Saturdays had an app that called
+ * their training days rest days and their rest days training days, for ever.
+ */
+function TrainingDaysCard({
+  settings,
+  onSave,
+}: {
+  settings: Settings;
+  onSave: (next: Partial<Settings>) => void;
+}) {
+  const runDays = settings.runDays;
+  const strengthDays = settings.strengthDays;
+
+  // The plan engine builds three runs a week, and the weekly gate counts a
+  // shortfall against that number — so picking two run days would report a
+  // missed session every week for ever. The count is fixed; which days are not.
+  const toggleRun = (day: number) => {
+    if (runDays.includes(day)) return;
+    // Replace the oldest choice, so tapping always does something.
+    const next = [...runDays.slice(1), day].sort((a, b) => a - b);
+    onSave({ runDays: next, strengthDays: strengthDays.filter((d) => !next.includes(d)) });
+  };
+
+  const toggleStrength = (day: number) => {
+    if (runDays.includes(day)) return; // one thing per day
+    const next = strengthDays.includes(day)
+      ? strengthDays.filter((d) => d !== day)
+      : [...strengthDays, day].sort((a, b) => a - b);
+    onSave({ strengthDays: next });
+  };
+
+  const consecutive = hasBackToBackRuns({ run: runDays, strength: strengthDays });
+
+  const row = (
+    selected: number[],
+    onPick: (day: number) => void,
+    tone: 'run' | 'walk',
+    label: string,
+  ) => (
+    <div className="mt-1.5 flex gap-1.5" role="group" aria-label={label}>
+      {WEEKDAY_NAMES.map((name, day) => {
+        const on = selected.includes(day);
+        const blocked = tone === 'walk' && runDays.includes(day);
+        return (
+          <button
+            key={name}
+            type="button"
+            aria-pressed={on}
+            aria-label={name}
+            disabled={blocked}
+            onClick={() => onPick(day)}
+            className={`tap !min-w-0 flex-1 rounded-xl border text-[0.9375rem] transition-colors ${
+              on
+                ? tone === 'run'
+                  ? 'border-run bg-run text-white'
+                  : 'border-walk bg-walk text-ink'
+                : blocked
+                  ? 'border-line bg-chalk-deep text-ink-faint'
+                  : 'border-line bg-paper hover:border-ink-faint'
+            }`}
+          >
+            {name.slice(0, 1)}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <Card>
+      <Eyebrow>Your training days</Eyebrow>
+      <p className="mt-1.5 leading-relaxed text-ink-soft">
+        Three runs a week, on the days that fit your life. Strength work is optional and never
+        shares a day with a run.
+      </p>
+
+      <div className="mt-3">
+        <span className="eyebrow">Runs</span>
+        {row(runDays, toggleRun, 'run', 'Days you run')}
+        <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-faint">
+          {listDays(daysFor('run', { run: runDays, strength: strengthDays }))}. Tap another day to
+          move the earliest one.
+        </p>
+      </div>
+
+      <div className="mt-3">
+        <span className="eyebrow">Strength</span>
+        {row(strengthDays, toggleStrength, 'walk', 'Days you do strength work')}
+        <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-faint">
+          {strengthDays.length
+            ? listDays(daysFor('strength', { run: runDays, strength: strengthDays }))
+            : 'None — the plan will not ask for any.'}
+        </p>
+      </div>
+
+      {consecutive && (
+        <div className="mt-3">
+          <Note tone="alert">
+            Two of your runs fall on consecutive days. That is the arrangement most likely to hurt a
+            beginner — the second run lands on tissue that has not finished repairing. It is
+            allowed; it is just worth knowing.
+          </Note>
+        </div>
+      )}
     </Card>
   );
 }

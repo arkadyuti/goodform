@@ -12,6 +12,7 @@ import {
   SEXES,
   SMOKING_STATUSES,
   UNITS,
+  RUN_DAYS_PER_WEEK,
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
 import { requireAuth, type AppEnv } from '../middleware.js';
@@ -35,7 +36,13 @@ const profileSchema = z.object({
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+const WEEKDAY = z.number().int().min(0).max(6);
+
 const settingsSchema = z.object({
+  // Exactly as many run days as the plan builds sessions for, or the weekly
+  // gate would count a shortfall the runner never actually had.
+  runDays: z.array(WEEKDAY).length(RUN_DAYS_PER_WEEK).optional(),
+  strengthDays: z.array(WEEKDAY).max(4).optional(),
   audioMode: z.enum(['transient', 'playback']).optional(),
   soundEnabled: z.boolean().optional(),
   hapticsEnabled: z.boolean().optional(),

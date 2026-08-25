@@ -37,6 +37,9 @@ export interface Settings {
   regimenReminders: boolean;
   sessionReminders: boolean;
   weeklyCheckReminders: boolean;
+  /** Weekdays carrying runs and strength work, Sunday = 0. */
+  runDays: number[];
+  strengthDays: number[];
   weeklyCheckDay: number;
   weeklyCheckTime: string;
   quietHoursStart: string;

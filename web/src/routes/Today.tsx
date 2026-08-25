@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { WITHDRAWAL_MESSAGE, daysClear, proteinTarget, startOfWeek } from '@goodform/shared';
+import {
+  DEFAULT_TRAINING_DAYS,
+  WITHDRAWAL_MESSAGE,
+  daysClear,
+  proteinTarget,
+  startOfWeek,
+  type TrainingDays,
+} from '@goodform/shared';
 import {
   emptyLog,
   type SessionRow,
@@ -51,7 +58,12 @@ export function Today() {
   const week = planData?.weeks.find((w) => w.index === plan?.currentWeek);
   const log = logData?.log ?? emptyLog(date);
 
-  const scheduled = scheduleFor(date);
+  // The runner's own week, not the default one.
+  const trainingDays = {
+    run: settings?.runDays ?? DEFAULT_TRAINING_DAYS.run,
+    strength: settings?.strengthDays ?? DEFAULT_TRAINING_DAYS.strength,
+  };
+  const scheduled = scheduleFor(date, trainingDays);
   const doneToday = (sessionData?.sessions ?? []).filter((s) => s.date === date);
   const runDone = doneToday.some((s) => s.type === 'run' || s.type === 'baseline');
   const strengthDone = doneToday.some((s) => s.type === 'strength');
@@ -82,7 +94,7 @@ export function Today() {
           {headline(scheduled, runDone || strengthDone)}
         </h1>
         <div className="mt-4">
-          <WeekStrip sessions={sessionData?.sessions ?? []} />
+          <WeekStrip sessions={sessionData?.sessions ?? []} trainingDays={trainingDays} />
         </div>
         <Link
           to="/calendar"
@@ -229,6 +241,7 @@ export function Today() {
           hasPlan={plan?.status === 'active'}
           sessions={sessionData?.sessions ?? []}
           onRun={() => navigate('/session/run')}
+          days={trainingDays}
         />
       )}
 
@@ -480,10 +493,12 @@ function RestDay({
   hasPlan,
   sessions,
   onRun,
+  days,
 }: {
   hasPlan: boolean;
   sessions: SessionRow[];
   onRun: () => void;
+  days: TrainingDays;
 }) {
   const [asking, setAsking] = useState(false);
   const date = today();
@@ -506,7 +521,7 @@ function RestDay({
   // have not done anything yet — so the first one says where the plan starts
   // instead.
   const nothingLoggedYet = runs.length === 0;
-  const firstRun = nextRunDate(date);
+  const firstRun = nextRunDate(date, days);
 
   return (
     <Card>
@@ -547,10 +562,10 @@ function RestDay({
 }
 
 /** The next day the plan asks for a run, starting from tomorrow. */
-function nextRunDate(from: string): string {
+function nextRunDate(from: string, days: TrainingDays): string {
   for (let i = 1; i <= 7; i++) {
     const candidate = shiftDays(from, i);
-    if (scheduleFor(candidate) === 'run') return candidate;
+    if (scheduleFor(candidate, days) === 'run') return candidate;
   }
   return shiftDays(from, 1);
 }

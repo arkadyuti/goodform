@@ -729,7 +729,8 @@ export function Onboarding() {
               where the adaptation actually happens.
             </p>
             <p className="mt-2 leading-relaxed text-ink-soft">
-              You can run on a different day whenever life needs you to; the app will tell you what
+              Those days are a starting point, not a rule — move them in Settings if your week looks
+              different. You can also run on a day the plan did not ask for; it will tell you what
               it thinks and then get out of the way.
             </p>
           </div>

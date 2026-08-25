@@ -126,7 +126,10 @@ export const settings = pgTable('settings', {
     .$type<string[]>()
     .notNull()
     .default(['water', 'sleep', 'alcohol', 'beer', 'cigarettes']),
-  customHabits: jsonb('custom_habits').$type<{ key: string; label: string; unit: string }[]>().notNull().default([]),
+  customHabits: jsonb('custom_habits')
+    .$type<{ key: string; label: string; unit: string }[]>()
+    .notNull()
+    .default([]),
   /** For the quit-support cards: typical daily count and unit cost before starting. */
   smokingBaselinePerDay: real('smoking_baseline_per_day'),
   cigaretteCost: real('cigarette_cost'),
@@ -143,6 +146,14 @@ export const settings = pgTable('settings', {
   sessionReminders: boolean('session_reminders').notNull().default(true),
   weeklyCheckReminders: boolean('weekly_check_reminders').notNull().default(true),
   /** 0 = Sunday. */
+  /**
+   * Which weekdays carry runs and strength work, Sunday = 0.
+   *
+   * The rhythm was hard-coded, so anyone whose week does not look like
+   * Mon/Wed/Sat had an app disagreeing with their life and no way to say so.
+   */
+  runDays: integer('run_days').array().notNull().default([1, 3, 6]),
+  strengthDays: integer('strength_days').array().notNull().default([2, 5]),
   weeklyCheckDay: integer('weekly_check_day').notNull().default(0),
   weeklyCheckTime: text('weekly_check_time').notNull().default('09:30'),
   quietHoursStart: text('quiet_hours_start').notNull().default('22:00'),

@@ -8,6 +8,7 @@ import {
   daysBetween,
   isDueOn,
   proteinTarget,
+  DEFAULT_TRAINING_DAYS,
   scheduleFor,
   startOfWeek,
   type Adherence,
@@ -47,7 +48,11 @@ function toSession(row: SessionRow): WorkoutSession {
 }
 
 /** Protein grams per day over a window, summed in the database. */
-async function proteinByDate(userId: string, from: string, to: string): Promise<Record<string, number>> {
+async function proteinByDate(
+  userId: string,
+  from: string,
+  to: string,
+): Promise<Record<string, number>> {
   const rows = await db
     .select({
       date: schema.nutritionEntries.date,
@@ -71,7 +76,11 @@ async function dailyLogsBetween(userId: string, from: string, to: string) {
     .select()
     .from(schema.dailyLogs)
     .where(
-      and(eq(schema.dailyLogs.userId, userId), gte(schema.dailyLogs.date, from), lte(schema.dailyLogs.date, to)),
+      and(
+        eq(schema.dailyLogs.userId, userId),
+        gte(schema.dailyLogs.date, from),
+        lte(schema.dailyLogs.date, to),
+      ),
     )
     .orderBy(asc(schema.dailyLogs.date));
 }
@@ -87,7 +96,9 @@ export const progressRoutes = new Hono<AppEnv>()
     const sessions = await db
       .select()
       .from(schema.workoutSessions)
-      .where(and(eq(schema.workoutSessions.userId, userId), gte(schema.workoutSessions.date, since)))
+      .where(
+        and(eq(schema.workoutSessions.userId, userId), gte(schema.workoutSessions.date, since)),
+      )
       .orderBy(desc(schema.workoutSessions.date));
 
     const runs = sessions.filter((s) => s.type === 'run' || s.type === 'baseline');
@@ -100,7 +111,11 @@ export const progressRoutes = new Hono<AppEnv>()
 
     const discomfort = runs
       .filter((s) => s.discomfortSeverity)
-      .map((s) => ({ date: s.date, location: s.discomfortLocation, severity: s.discomfortSeverity }));
+      .map((s) => ({
+        date: s.date,
+        location: s.discomfortLocation,
+        severity: s.discomfortSeverity,
+      }));
 
     const [plan] = await db
       .select()
@@ -109,7 +124,11 @@ export const progressRoutes = new Hono<AppEnv>()
       .limit(1);
 
     const weeks = plan
-      ? await db.select().from(schema.planWeeks).where(eq(schema.planWeeks.planId, plan.id)).orderBy(schema.planWeeks.index)
+      ? await db
+          .select()
+          .from(schema.planWeeks)
+          .where(eq(schema.planWeeks.planId, plan.id))
+          .orderBy(schema.planWeeks.index)
       : [];
 
     const plannedRuns = weeks
@@ -238,12 +257,21 @@ export const progressRoutes = new Hono<AppEnv>()
     const userId = c.get('userId');
     const requested = c.req.query('week');
     const today = await todayFrom(c);
-    const from = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? startOfWeek(requested) : startOfWeek(today);
+    const from =
+      requested && /^\d{4}-\d{2}-\d{2}$/.test(requested)
+        ? startOfWeek(requested)
+        : startOfWeek(today);
     const to = addDays(from, 6);
     const previousFrom = addDays(from, -7);
 
-    const [profileRow] = await db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId));
-    const [settingsRow] = await db.select().from(schema.settings).where(eq(schema.settings.userId, userId));
+    const [profileRow] = await db
+      .select()
+      .from(schema.profiles)
+      .where(eq(schema.profiles.userId, userId));
+    const [settingsRow] = await db
+      .select()
+      .from(schema.settings)
+      .where(eq(schema.settings.userId, userId));
 
     const [sessions, earlier, logs, previousLogs, checks, protein] = await Promise.all([
       db
@@ -260,7 +288,12 @@ export const progressRoutes = new Hono<AppEnv>()
       db
         .select()
         .from(schema.workoutSessions)
-        .where(and(eq(schema.workoutSessions.userId, userId), lte(schema.workoutSessions.date, addDays(from, -1)))),
+        .where(
+          and(
+            eq(schema.workoutSessions.userId, userId),
+            lte(schema.workoutSessions.date, addDays(from, -1)),
+          ),
+        ),
       dailyLogsBetween(userId, from, to),
       dailyLogsBetween(userId, previousFrom, addDays(from, -1)),
       db
@@ -282,7 +315,9 @@ export const progressRoutes = new Hono<AppEnv>()
       ? await db
           .select()
           .from(schema.planWeeks)
-          .where(and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)))
+          .where(
+            and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
+          )
       : [];
 
     // Doses over the same week, so the review covers the whole routine.
@@ -306,7 +341,10 @@ export const progressRoutes = new Hono<AppEnv>()
 
     const previousLongestRunSec = earlier
       .filter((s) => (s.type === 'run' || s.type === 'baseline') && s.completion !== 'skipped')
-      .reduce((max, s) => Math.max(max, (s.prescription as { runSec?: number } | null)?.runSec ?? 0), 0);
+      .reduce(
+        (max, s) => Math.max(max, (s.prescription as { runSec?: number } | null)?.runSec ?? 0),
+        0,
+      );
 
     const withinWeek = checks.find((check) => check.date >= from && check.date <= to) ?? null;
     const before = checks.find((check) => check.date < (withinWeek?.date ?? from)) ?? null;
@@ -322,7 +360,9 @@ export const progressRoutes = new Hono<AppEnv>()
       proteinByDate: protein,
       // A withdrawn target must not reappear inside the weekly review.
       proteinTargetG:
-        profileRow && !settingsRow?.targetsWithdrawnAt ? proteinTarget(profileRow.weightKg).targetG : null,
+        profileRow && !settingsRow?.targetsWithdrawnAt
+          ? proteinTarget(profileRow.weightKg).targetG
+          : null,
       check: withinWeek,
       previousCheck: before,
       previousLongestRunSec,
@@ -356,6 +396,14 @@ export const progressRoutes = new Hono<AppEnv>()
       .limit(1);
     const planStart = firstPlan?.startDate ?? null;
 
+    const [settingsRow] = await db
+      .select({ runDays: schema.settings.runDays, strengthDays: schema.settings.strengthDays })
+      .from(schema.settings)
+      .where(eq(schema.settings.userId, userId));
+    const trainingDays = settingsRow
+      ? { run: settingsRow.runDays, strength: settingsRow.strengthDays }
+      : DEFAULT_TRAINING_DAYS;
+
     const [sessions, logs, checks, protein, doseEvents, items] = await Promise.all([
       db
         .select()
@@ -385,16 +433,20 @@ export const progressRoutes = new Hono<AppEnv>()
     ]);
 
     const sessionsByDate = new Map<string, typeof sessions>();
-    for (const row of sessions) sessionsByDate.set(row.date, [...(sessionsByDate.get(row.date) ?? []), row]);
+    for (const row of sessions)
+      sessionsByDate.set(row.date, [...(sessionsByDate.get(row.date) ?? []), row]);
     const logByDate = new Map(logs.map((l) => [l.date, l]));
     const checkByDate = new Map(checks.map((ch) => [ch.date, ch]));
 
     const days = dateRange(from, to).map((date) => {
-      const due = items.reduce((total, item) => total + (isDueOn(item, date) ? item.times.length : 0), 0);
+      const due = items.reduce(
+        (total, item) => total + (isDueOn(item, date) ? item.times.length : 0),
+        0,
+      );
       const onDay = doseEvents.filter((e) => e.dueDate === date);
       return {
         date,
-        scheduled: planStart && date >= planStart ? scheduleFor(date) : null,
+        scheduled: planStart && date >= planStart ? scheduleFor(date, trainingDays) : null,
         sessions: (sessionsByDate.get(date) ?? []).map((session) => ({
           id: session.id,
           type: session.type,
@@ -426,7 +478,12 @@ export const progressRoutes = new Hono<AppEnv>()
     const [row] = await db
       .select()
       .from(schema.workoutSessions)
-      .where(and(eq(schema.workoutSessions.userId, userId), eq(schema.workoutSessions.id, c.req.param('id'))));
+      .where(
+        and(
+          eq(schema.workoutSessions.userId, userId),
+          eq(schema.workoutSessions.id, c.req.param('id')),
+        ),
+      );
     if (!row) return c.json({ error: 'Not found' }, 404);
 
     // The day around the session: what was eaten, drunk and slept near it.
@@ -460,7 +517,11 @@ export const progressRoutes = new Hono<AppEnv>()
     });
   });
 
-function oldestDate(sessions: { date: string }[], logs: { date: string }[], fallback: string): string {
+function oldestDate(
+  sessions: { date: string }[],
+  logs: { date: string }[],
+  fallback: string,
+): string {
   const dates = [...sessions, ...logs].map((r) => r.date);
   return dates.length ? dates.reduce((min, d) => (d < min ? d : min)) : fallback;
 }

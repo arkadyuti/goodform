@@ -43,6 +43,13 @@
       "when": 1787634322414,
       "tag": "0005_brief_wolf_cub",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787635666163,
+      "tag": "0006_wet_vertigo",
+      "breakpoints": true
     }
   ]
 }

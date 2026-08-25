@@ -12,6 +12,7 @@ import {
   type DueReminder,
   type ReminderPrefs,
   type ReminderRecord,
+  type TrainingDays,
 } from '@goodform/shared';
 import { db, schema } from './db/index.js';
 import { localParts } from './time.js';
@@ -24,6 +25,11 @@ type SettingsRow = typeof schema.settings.$inferSelect;
 const TICK_MS = 60_000;
 /** The guardrail sweep looks at four weeks of data; four times a day is plenty. */
 const GUARDRAIL_MS = 6 * 60 * 60 * 1000;
+
+/** The weekdays this user trains on, as the schedule helpers want them. */
+export function trainingDays(row: SettingsRow): TrainingDays {
+  return { run: row.runDays, strength: row.strengthDays };
+}
 
 export function prefsFrom(row: SettingsRow): ReminderPrefs {
   return {
@@ -124,7 +130,7 @@ async function tickUser(settingsRow: SettingsRow, now: Date): Promise<void> {
     : doseStates(items, events, localDate, localTime);
 
   // Is a session outstanding today?
-  const scheduled = scheduleFor(localDate);
+  const scheduled = scheduleFor(localDate, trainingDays(settingsRow));
   let sessionDue = false;
   if (scheduled !== 'rest') {
     const [plan] = await db

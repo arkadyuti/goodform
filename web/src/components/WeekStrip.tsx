@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import type { TrainingDays } from '@goodform/shared';
 import type { SessionRow } from '../api/hooks.ts';
 import { scheduleFor, shiftDays, today } from '../lib/date.ts';
 
@@ -9,7 +10,13 @@ const LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
  * and amber vocabulary as the interval ribbon. Rest days are as visible as
  * working days, because rest is when the adaptation actually happens.
  */
-export function WeekStrip({ sessions }: { sessions: SessionRow[] }) {
+export function WeekStrip({
+  sessions,
+  trainingDays,
+}: {
+  sessions: SessionRow[];
+  trainingDays: TrainingDays;
+}) {
   const now = today();
   const start = shiftDays(now, -new Date(`${now}T12:00:00`).getDay());
   const days = Array.from({ length: 7 }, (_, i) => shiftDays(start, i));
@@ -22,7 +29,7 @@ export function WeekStrip({ sessions }: { sessions: SessionRow[] }) {
       {/* The accessible name has to contain the visible day letters. */}
       <span className="sr-only">This week's sessions — open the plan.</span>
       {days.map((date, i) => {
-        const scheduled = scheduleFor(date);
+        const scheduled = scheduleFor(date, trainingDays);
         const done = sessions.some((s) => s.date === date && s.completion !== 'skipped');
         const isToday = date === now;
         const past = date < now;
@@ -45,7 +52,9 @@ export function WeekStrip({ sessions }: { sessions: SessionRow[] }) {
               } ${isToday ? 'ring-2 ring-ink ring-offset-[3px] ring-offset-chalk' : ''}`}
               aria-hidden
             />
-            <span className={`text-[0.6875rem] ${isToday ? 'font-bold text-ink' : 'text-ink-faint'}`}>
+            <span
+              className={`text-[0.6875rem] ${isToday ? 'font-bold text-ink' : 'text-ink-faint'}`}
+            >
               {LETTERS[i]}
             </span>
           </span>
