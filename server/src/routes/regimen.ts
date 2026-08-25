@@ -275,8 +275,8 @@ export const regimenRoutes = new Hono<AppEnv>()
     // Supply follows the ticks, so the count on screen is the count in the box.
     const wasTaken = previous?.status === 'taken';
     const nowTaken = input.status === 'taken';
-    if (nowTaken && !wasTaken) await adjustSupply(input.itemId, -1);
-    else if (!nowTaken && wasTaken) await adjustSupply(input.itemId, 1);
+    if (nowTaken && !wasTaken) await adjustSupply(userId, input.itemId, -1);
+    else if (!nowTaken && wasTaken) await adjustSupply(userId, input.itemId, 1);
 
     await resolveReminder(
       userId,
@@ -300,7 +300,7 @@ export const regimenRoutes = new Hono<AppEnv>()
         ),
       );
     if (!row) return c.json({ ok: true });
-    if (row.status === 'taken') await adjustSupply(row.itemId, 1);
+    if (row.status === 'taken') await adjustSupply(userId, row.itemId, 1);
     await db.delete(schema.regimenEvents).where(eq(schema.regimenEvents.id, row.id));
     return c.json({ ok: true });
   })

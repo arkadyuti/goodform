@@ -5,15 +5,7 @@ import { db, schema } from '../db/index.js';
 import { requireAuth, type AppEnv } from '../middleware.js';
 import { csv } from '../csv.js';
 
-const DATASETS = [
-  'sessions',
-  'daily',
-  'nutrition',
-  'weekly',
-  'plan',
-  'regimen',
-  'doses',
-] as const;
+const DATASETS = ['sessions', 'daily', 'nutrition', 'weekly', 'plan', 'regimen', 'doses'] as const;
 type Dataset = (typeof DATASETS)[number];
 
 // ---------------------------------------------------------------------------
@@ -39,11 +31,31 @@ async function collect(userId: string) {
     db.select().from(schema.profiles).where(eq(schema.profiles.userId, userId)),
     db.select().from(schema.screenings).where(eq(schema.screenings.userId, userId)),
     db.select().from(schema.settings).where(eq(schema.settings.userId, userId)),
-    db.select().from(schema.baselines).where(eq(schema.baselines.userId, userId)).orderBy(asc(schema.baselines.recordedAt)),
-    db.select().from(schema.plans).where(eq(schema.plans.userId, userId)).orderBy(asc(schema.plans.createdAt)),
-    db.select().from(schema.workoutSessions).where(eq(schema.workoutSessions.userId, userId)).orderBy(asc(schema.workoutSessions.date)),
-    db.select().from(schema.dailyLogs).where(eq(schema.dailyLogs.userId, userId)).orderBy(asc(schema.dailyLogs.date)),
-    db.select().from(schema.weeklyChecks).where(eq(schema.weeklyChecks.userId, userId)).orderBy(asc(schema.weeklyChecks.date)),
+    db
+      .select()
+      .from(schema.baselines)
+      .where(eq(schema.baselines.userId, userId))
+      .orderBy(asc(schema.baselines.recordedAt)),
+    db
+      .select()
+      .from(schema.plans)
+      .where(eq(schema.plans.userId, userId))
+      .orderBy(asc(schema.plans.createdAt)),
+    db
+      .select()
+      .from(schema.workoutSessions)
+      .where(eq(schema.workoutSessions.userId, userId))
+      .orderBy(asc(schema.workoutSessions.date)),
+    db
+      .select()
+      .from(schema.dailyLogs)
+      .where(eq(schema.dailyLogs.userId, userId))
+      .orderBy(asc(schema.dailyLogs.date)),
+    db
+      .select()
+      .from(schema.weeklyChecks)
+      .where(eq(schema.weeklyChecks.userId, userId))
+      .orderBy(asc(schema.weeklyChecks.date)),
     db
       .select({
         date: schema.nutritionEntries.date,
@@ -58,8 +70,16 @@ async function collect(userId: string) {
       .where(eq(schema.nutritionEntries.userId, userId))
       .orderBy(asc(schema.nutritionEntries.date)),
     db.select().from(schema.strengthProgress).where(eq(schema.strengthProgress.userId, userId)),
-    db.select().from(schema.regimenItems).where(eq(schema.regimenItems.userId, userId)).orderBy(asc(schema.regimenItems.name)),
-    db.select().from(schema.regimenEvents).where(eq(schema.regimenEvents.userId, userId)).orderBy(asc(schema.regimenEvents.dueDate)),
+    db
+      .select()
+      .from(schema.regimenItems)
+      .where(eq(schema.regimenItems.userId, userId))
+      .orderBy(asc(schema.regimenItems.name)),
+    db
+      .select()
+      .from(schema.regimenEvents)
+      .where(eq(schema.regimenEvents.userId, userId))
+      .orderBy(asc(schema.regimenEvents.dueDate)),
     // Foods the user typed in themselves are theirs; the seeded library is not.
     db.select().from(schema.foodItems).where(eq(schema.foodItems.ownerId, userId)),
   ]);
@@ -101,21 +121,74 @@ function toCsv(dataset: Dataset, data: Collected): string {
   switch (dataset) {
     case 'sessions':
       return csv(
-        ['date', 'type', 'plan_week', 'completion', 'effort', 'discomfort_location', 'discomfort_severity', 'intervals_completed', 'duration_sec', 'run_sec', 'walk_sec', 'reps', 'notes'],
+        [
+          'date',
+          'type',
+          'plan_week',
+          'completion',
+          'effort',
+          'discomfort_location',
+          'discomfort_severity',
+          'intervals_completed',
+          'duration_sec',
+          'run_sec',
+          'walk_sec',
+          'reps',
+          'notes',
+        ],
         data.sessions.map((s) => {
           const p = s.prescription as { runSec?: number; walkSec?: number; reps?: number } | null;
-          return [s.date, s.type, s.planWeek, s.completion, s.effort, s.discomfortLocation, s.discomfortSeverity, s.intervalsCompleted, s.durationSec, p?.runSec, p?.walkSec, p?.reps, s.notes];
+          return [
+            s.date,
+            s.type,
+            s.planWeek,
+            s.completion,
+            s.effort,
+            s.discomfortLocation,
+            s.discomfortSeverity,
+            s.intervalsCompleted,
+            s.durationSec,
+            p?.runSec,
+            p?.walkSec,
+            p?.reps,
+            s.notes,
+          ];
         }),
       );
     case 'daily':
       return csv(
-        ['date', 'water_ml', 'sleep_hours', 'alcohol_units', 'beers', 'cigarettes', 'custom_habits', 'notes'],
-        data.dailyLogs.map((l) => [l.date, l.waterMl, l.sleepHours, l.alcoholUnits, l.beers, l.cigarettes, JSON.stringify(l.customHabits), l.notes]),
+        [
+          'date',
+          'water_ml',
+          'sleep_hours',
+          'alcohol_units',
+          'beers',
+          'cigarettes',
+          'custom_habits',
+          'notes',
+        ],
+        data.dailyLogs.map((l) => [
+          l.date,
+          l.waterMl,
+          l.sleepHours,
+          l.alcoholUnits,
+          l.beers,
+          l.cigarettes,
+          JSON.stringify(l.customHabits),
+          l.notes,
+        ]),
       );
     case 'nutrition':
       return csv(
         ['date', 'food', 'serving', 'servings', 'protein_g', 'logged_at'],
-        data.nutrition.map((n) => [n.date, n.name, n.servingLabel, Number(n.servings), Math.round(n.proteinG * Number(n.servings) * 10) / 10, n.createdAt]),
+        data.nutrition.map((n) => [
+          n.date,
+          n.name,
+          n.servingLabel,
+          Number(n.servings),
+          Math.round(n.proteinG * Number(n.servings) * 10) / 10,
+          n.createdAt,
+        ]),
       );
     case 'weekly':
       return csv(
@@ -124,16 +197,74 @@ function toCsv(dataset: Dataset, data: Collected): string {
       );
     case 'plan':
       return csv(
-        ['plan_id', 'goal', 'start_date', 'status', 'week', 'run_sec', 'walk_sec', 'reps', 'sessions_per_week', 'is_deload', 'repeats', 'completed_at'],
+        [
+          'plan_id',
+          'goal',
+          'start_date',
+          'status',
+          'week',
+          'run_sec',
+          'walk_sec',
+          'reps',
+          'sessions_per_week',
+          'is_deload',
+          'repeats',
+          'completed_at',
+        ],
         data.planWeeks.flatMap(({ planId, weeks }) => {
           const plan = data.plans.find((p) => p.id === planId);
-          return weeks.map((w) => [planId, plan?.goal, plan?.startDate, plan?.status, w.index, w.runSec, w.walkSec, w.reps, w.sessionsPerWeek, w.isDeload, w.repeats, w.completedAt]);
+          return weeks.map((w) => [
+            planId,
+            plan?.goal,
+            plan?.startDate,
+            plan?.status,
+            w.index,
+            w.runSec,
+            w.walkSec,
+            w.reps,
+            w.sessionsPerWeek,
+            w.isDeload,
+            w.repeats,
+            w.completedAt,
+          ]);
         }),
       );
     case 'regimen':
       return csv(
-        ['name', 'kind', 'dose_amount', 'dose_form', 'schedule', 'weekdays', 'interval_days', 'times', 'food_rule', 'course_start', 'course_end', 'supply_count', 'reminders', 'archived_at', 'notes'],
-        data.regimenItems.map((i) => [i.name, i.kind, i.doseAmount, i.doseForm, i.scheduleKind, i.weekdays.join(' '), i.intervalDays, i.times.join(' '), i.foodRule, i.courseStart, i.courseEnd, i.supplyCount, i.remindersEnabled, i.archivedAt, i.notes]),
+        [
+          'name',
+          'kind',
+          'dose_amount',
+          'dose_form',
+          'schedule',
+          'weekdays',
+          'interval_days',
+          'times',
+          'food_rule',
+          'course_start',
+          'course_end',
+          'supply_count',
+          'reminders',
+          'archived_at',
+          'notes',
+        ],
+        data.regimenItems.map((i) => [
+          i.name,
+          i.kind,
+          i.doseAmount,
+          i.doseForm,
+          i.scheduleKind,
+          i.weekdays.join(' '),
+          i.intervalDays,
+          i.times.join(' '),
+          i.foodRule,
+          i.courseStart,
+          i.courseEnd,
+          i.supplyCount,
+          i.remindersEnabled,
+          i.archivedAt,
+          i.notes,
+        ]),
       );
     case 'doses': {
       const names = new Map(data.regimenItems.map((i) => [i.id, i]));
@@ -177,21 +308,73 @@ export const accountRoutes = new Hono<AppEnv>()
     }
     const data = await collect(c.get('userId'));
     c.header('Content-Type', 'text/csv; charset=utf-8');
-    c.header('Content-Disposition', `attachment; filename="goodform-${dataset}-${new Date().toISOString().slice(0, 10)}.csv"`);
+    c.header(
+      'Content-Disposition',
+      `attachment; filename="goodform-${dataset}-${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
     return c.body(toCsv(dataset, data));
   })
 
   .get('/datasets', (c) => c.json({ datasets: DATASETS }));
 
 /**
- * Deletion is separated from the rest so the destructive route is impossible to
- * reach by accident: it is a DELETE, it needs the account's own email typed
- * back, and it removes the user row, which cascades through everything else.
+ * The two destructive actions, kept together and away from the reads.
+ *
+ * What actually makes them hard to trigger by accident is not the file split —
+ * both mount at the same path with the same guard — but the shape of each
+ * request: a DELETE, or a POST to an explicit path, each requiring the
+ * account's own email address typed back.
  */
 export const accountDeleteRoutes = new Hono<AppEnv>()
   .use('*', requireAuth)
+
+  /**
+   * Start over without losing the account.
+   *
+   * Deleting everything was the only reset, and with Google sign-in that
+   * destroys the login too — so someone whose plan was built on a bad guess had
+   * to abandon the address they signed up with to fix it. This clears what the
+   * plan is built from and what it produced, and keeps who you are: profile,
+   * settings, your list of supplements and medicines, and any foods you added.
+   */
+  .post('/reset', async (c) => {
+    const parsed = z
+      .object({ confirmEmail: z.string() })
+      .safeParse(await c.req.json().catch(() => ({})));
+    const email = c.get('userEmail');
+    if (!parsed.success || parsed.data.confirmEmail.trim().toLowerCase() !== email.toLowerCase()) {
+      return c.json({ error: 'Type your email address exactly to confirm' }, 400);
+    }
+
+    const userId = c.get('userId');
+    // One transaction: a half-cleared account is worse than either end of this.
+    await db.transaction(async (tx) => {
+      // plan_weeks cascades from plans; regimen_items are kept, so their dose
+      // history is cleared by hand.
+      await tx.delete(schema.workoutSessions).where(eq(schema.workoutSessions.userId, userId));
+      await tx.delete(schema.plans).where(eq(schema.plans.userId, userId));
+      await tx.delete(schema.baselines).where(eq(schema.baselines.userId, userId));
+      await tx.delete(schema.dailyLogs).where(eq(schema.dailyLogs.userId, userId));
+      await tx.delete(schema.weeklyChecks).where(eq(schema.weeklyChecks.userId, userId));
+      await tx.delete(schema.nutritionEntries).where(eq(schema.nutritionEntries.userId, userId));
+      await tx.delete(schema.strengthProgress).where(eq(schema.strengthProgress.userId, userId));
+      await tx.delete(schema.regimenEvents).where(eq(schema.regimenEvents.userId, userId));
+      await tx.delete(schema.reminders).where(eq(schema.reminders.userId, userId));
+      // Guardrails judge a window that no longer exists, so the withdrawal they
+      // caused should not outlive it.
+      await tx
+        .update(schema.settings)
+        .set({ guardrailSignals: [], targetsWithdrawnAt: null, targetsRestoredAt: null })
+        .where(eq(schema.settings.userId, userId));
+    });
+
+    return c.json({ ok: true, reset: true });
+  })
+
   .delete('/', async (c) => {
-    const parsed = z.object({ confirmEmail: z.string() }).safeParse(await c.req.json().catch(() => ({})));
+    const parsed = z
+      .object({ confirmEmail: z.string() })
+      .safeParse(await c.req.json().catch(() => ({})));
     const email = c.get('userEmail');
     if (!parsed.success || parsed.data.confirmEmail.trim().toLowerCase() !== email.toLowerCase()) {
       return c.json({ error: 'Type your email address exactly to confirm deletion' }, 400);

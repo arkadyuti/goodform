@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { minutesOfDay, timeFromMinutes, withinWindow } from '@goodform/shared';
 import {
   useDeleteAccount,
+  useResetData,
   useProfile,
   useRegimenItems,
   useRestoreTargets,
@@ -292,6 +293,7 @@ export function SettingsView() {
         Sign out
       </Button>
 
+      <ResetDataCard email={session?.user?.email ?? ''} />
       <DeleteAccountCard email={session?.user?.email ?? ''} />
     </div>
   );
@@ -630,6 +632,84 @@ function RestoreTargetsCard() {
 }
 
 /** P3: GDPR self-serve deletion. Deliberately hard to reach by accident. */
+/**
+ * Start over, keeping the account.
+ *
+ * Sits above the delete control on purpose: someone who wants a clean slate
+ * almost always wants this one, and deleting the account is only the right
+ * answer if they are leaving.
+ */
+function ResetDataCard({ email }: { email: string }) {
+  const reset = useResetData();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  if (done) {
+    return (
+      <Note tone="run">
+        Cleared. Your profile and settings are as they were — build a new plan whenever you are
+        ready.
+      </Note>
+    );
+  }
+
+  if (!open) {
+    return (
+      <Button variant="quiet" full className="py-3" onClick={() => setOpen(true)}>
+        Start over with a clean slate
+      </Button>
+    );
+  }
+
+  return (
+    <Card>
+      <Eyebrow>Start over</Eyebrow>
+      <p className="mt-1.5 leading-relaxed">
+        Clears your plan, every logged session, your habit and food logs, measurements and dose
+        history — then puts you back at the start so you can build a fresh plan.
+      </p>
+      <p className="mt-2 leading-relaxed text-ink-soft">
+        Your account, profile, settings and your list of supplements and medicines all stay. This
+        cannot be undone, so download your data first if any of it matters.
+      </p>
+      <div className="mt-3">
+        <Field label={`Type ${email} to confirm`}>
+          <TextInput
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoComplete="off"
+            placeholder={email}
+          />
+        </Field>
+      </div>
+      {error && (
+        <div className="mt-2.5">
+          <Note tone="alert">{error}</Note>
+        </div>
+      )}
+      <div className="mt-3 flex gap-2.5">
+        <Button variant="secondary" full onClick={() => setOpen(false)}>
+          Keep everything
+        </Button>
+        <Button
+          disabled={reset.isPending || typed.trim().toLowerCase() !== email.toLowerCase()}
+          onClick={() => {
+            setError(null);
+            reset.mutate(typed, {
+              onSuccess: () => setDone(true),
+              onError: () => setError('That did not work. Nothing has been cleared.'),
+            });
+          }}
+        >
+          {reset.isPending ? 'Clearing' : 'Clear it'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function DeleteAccountCard({ email }: { email: string }) {
   const remove = useDeleteAccount();
   const [open, setOpen] = useState(false);

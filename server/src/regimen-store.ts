@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lte } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import type { DoseEvent, RegimenItem } from '@goodform/shared';
 import { db, schema } from './db/index.js';
 
@@ -80,7 +80,10 @@ export async function usersAwaitingReminders() {
   const rows = await db
     .select({ settings: schema.settings })
     .from(schema.settings)
-    .innerJoin(schema.pushSubscriptions, eq(schema.pushSubscriptions.userId, schema.settings.userId))
+    .innerJoin(
+      schema.pushSubscriptions,
+      eq(schema.pushSubscriptions.userId, schema.settings.userId),
+    )
     .where(eq(schema.settings.remindersEnabled, true));
 
   // The join fans out per device; one row per user is what the caller wants.
@@ -90,13 +93,30 @@ export async function usersAwaitingReminders() {
 }
 
 /** Adjusts the packet count when a dose is ticked off or a tick is undone. */
-export async function adjustSupply(itemId: string, delta: number): Promise<void> {
-  const [item] = await db.select().from(schema.regimenItems).where(eq(schema.regimenItems.id, itemId));
-  if (!item || item.supplyCount === null) return;
+/**
+ * Moves the packet count by one, atomically.
+ *
+ * This used to read the count and then write it back, so two devices ticking
+ * the same dose in the same second both read the same number and both wrote
+ * the same decrement — one tick lost, and the count on screen no longer the
+ * count in the box. Doing the arithmetic inside the UPDATE means the database
+ * serialises it. The `userId` filter is the other half: an item id alone was
+ * enough to move someone else's supply.
+ */
+export async function adjustSupply(userId: string, itemId: string, delta: number): Promise<void> {
   await db
     .update(schema.regimenItems)
-    .set({ supplyCount: Math.max(0, item.supplyCount + delta), updatedAt: new Date() })
-    .where(eq(schema.regimenItems.id, itemId));
+    .set({
+      supplyCount: sql`GREATEST(0, ${schema.regimenItems.supplyCount} + ${delta})`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(schema.regimenItems.userId, userId),
+        eq(schema.regimenItems.id, itemId),
+        isNotNull(schema.regimenItems.supplyCount),
+      ),
+    );
 }
 
 /** Clears any pending nudge for an occurrence the user has now acted on. */

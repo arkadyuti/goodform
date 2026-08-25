@@ -595,6 +595,18 @@ export function useRestoreTargets() {
   });
 }
 
+/** FR: start over without losing the account. */
+export function useResetData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ['account', 'reset'],
+    mutationFn: (confirmEmail: string) => api.post('/account/reset', { confirmEmail }),
+    onSuccess: () => {
+      void qc.invalidateQueries();
+    },
+  });
+}
+
 export function useDeleteAccount() {
   return useMutation({
     mutationFn: (confirmEmail: string) => api.del('/account', { confirmEmail }),
