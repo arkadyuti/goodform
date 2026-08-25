@@ -148,6 +148,17 @@ docker exec postgres-db psql -U admin -d goodform -c 'DELETE FROM "user";'
 Cascades to every profile, plan, session and log. Seeded foods survive — they
 belong to nobody. Hard-refresh afterwards to clear the stale session cookie.
 
+That is **every** account, which is what you want on a laptop and not what you
+want on a server with more than one person on it. For a single account:
+
+```bash
+psql -d goodform -c "DELETE FROM \"user\" WHERE email = 'someone@example.com';"
+```
+
+Anyone can also delete their own account from Settings — it asks them to type
+their email address, cascades the same way, and sits next to the export so
+nothing has to be lost to leave.
+
 ## Production
 
 `pnpm build` typechecks everything and bundles the server with esbuild into

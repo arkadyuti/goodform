@@ -155,6 +155,43 @@ Two devices ticking the same dose can both decrement, or neither.
 
 ---
 
+## Deleting and resetting data
+
+**What exists.** `DELETE /api/account` (`server/src/routes/account.ts`), reached
+from Settings → "Delete everything". It is gated on typing your own email
+address, removes the foods you created while leaving the seeded library alone,
+and cascades from the `user` row through every table — including the auth
+session, which is what signs the browser out. Verified against the live schema:
+all 21 foreign keys are `ON DELETE CASCADE`, and `workout_sessions.plan_id` is
+`SET NULL` on purpose, so a logged session outlives the plan it belonged to.
+The JSON and CSV exports sit next to it, so nothing has to be lost to leave.
+
+Two things it does not cover:
+
+### 14. No way to start over without deleting the account
+The only reset is total: the account goes too, and with Google sign-in that
+means the login is destroyed along with the data. Someone who wants a clean
+slate — a false start, a plan built on a wrong baseline, a year of stale logs —
+has to delete everything and sign up again. A "clear my training data, keep my
+account" action would delete plans, sessions, logs, checks, nutrition entries
+and dose history while leaving the user row, profile and settings intact, and
+drop the caller back at onboarding. It is the same cascade with a narrower root,
+plus the same typed-confirmation guard.
+
+### 15. No per-user cleanup for whoever runs the server
+There is no operator path to remove or reset one specific person — only the
+self-serve route, which needs their session. `README.md` documents
+`DELETE FROM "user";` under "Starting over", but that is *every* user, which is
+the right tool for a development database and the wrong one for a live box with
+more than one account on it. The single-user form is:
+
+```bash
+sudo -u postgres psql -d goodform -c "DELETE FROM \"user\" WHERE email = 'someone@example.com';"
+```
+
+Worth adding to the README beside the existing command, with the distinction
+spelled out — the two differ by a `WHERE` clause and by everything.
+
 ## Operating notes
 
 - **Google OAuth needs its production redirect URI registered** before the Google
