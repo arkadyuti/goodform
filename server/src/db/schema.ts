@@ -18,22 +18,32 @@ import {
 // Better Auth tables
 // ---------------------------------------------------------------------------
 
+/*
+ * Every timestamp column is `timestamptz`.
+ *
+ * These all hold instants — when a row was written, when a session expires,
+ * when a dose was ticked — and an instant without an offset is only meaningful
+ * if you also know which clock recorded it. It worked while the one box ran on
+ * UTC and would have started lying the moment that changed. Wall-clock values
+ * that genuinely have no offset, like a dose's `08:00` or a log's date, are
+ * stored as text and date columns on purpose, and are untouched by this.
+ */
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const session = pgTable('session', {
   id: text('id').primaryKey(),
-  expiresAt: timestamp('expires_at').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   token: text('token').notNull().unique(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
   userId: text('user_id')
@@ -53,21 +63,21 @@ export const account = pgTable('account', {
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
   idToken: text('id_token'),
-  accessTokenExpiresAt: timestamp('access_token_expires_at'),
-  refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
   scope: text('scope'),
   password: text('password'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const verification = pgTable('verification', {
   id: text('id').primaryKey(),
   identifier: text('identifier').notNull(),
   value: text('value').notNull(),
-  expiresAt: timestamp('expires_at').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -92,7 +102,7 @@ export const profiles = pgTable('profiles', {
   injuryNotes: text('injury_notes'),
   equipment: jsonb('equipment').$type<string[]>().notNull().default(['none']),
   goal: text('goal').notNull(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const screenings = pgTable('screenings', {
@@ -100,8 +110,8 @@ export const screenings = pgTable('screenings', {
     .primaryKey()
     .references(() => user.id, { onDelete: 'cascade' }),
   flags: jsonb('flags').$type<string[]>().notNull().default([]),
-  completedAt: timestamp('completed_at').notNull().defaultNow(),
-  acknowledgedAt: timestamp('acknowledged_at'),
+  completedAt: timestamp('completed_at', { withTimezone: true }).notNull().defaultNow(),
+  acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true }),
 });
 
 export const settings = pgTable('settings', {
@@ -154,14 +164,14 @@ export const settings = pgTable('settings', {
   // --- Nutrition guardrails (P3) -----------------------------------------
   /** Set when a disordered pattern was detected and the numeric targets were
    *  put away. Cleared only by the user, from Settings. */
-  targetsWithdrawnAt: timestamp('targets_withdrawn_at'),
-  targetsRestoredAt: timestamp('targets_restored_at'),
+  targetsWithdrawnAt: timestamp('targets_withdrawn_at', { withTimezone: true }),
+  targetsRestoredAt: timestamp('targets_restored_at', { withTimezone: true }),
   guardrailSignals: jsonb('guardrail_signals')
     .$type<{ id: string; label: string; detail: string }[]>()
     .notNull()
     .default([]),
 
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -175,7 +185,7 @@ export const baselines = pgTable('baselines', {
     .references(() => user.id, { onDelete: 'cascade' }),
   minutesRun: real('minutes_run').notNull(),
   stopReason: text('stop_reason').notNull(),
-  recordedAt: timestamp('recorded_at').notNull().defaultNow(),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const plans = pgTable(
@@ -194,7 +204,7 @@ export const plans = pgTable(
     status: text('status').notNull().default('active'),
     /** Set when a gate paused progression; cleared on acknowledgement. */
     pausedReason: text('paused_reason'),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('plans_user_idx').on(t.userId)],
 );
@@ -214,7 +224,7 @@ export const planWeeks = pgTable(
     totalRunSec: integer('total_run_sec').notNull(),
     /** How many times this week has been repeated. */
     repeats: integer('repeats').notNull().default(0),
-    completedAt: timestamp('completed_at'),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (t) => [primaryKey({ columns: [t.planId, t.index] })],
 );
@@ -247,7 +257,7 @@ export const workoutSessions = pgTable(
     /** Per-exercise sets done, for strength sessions. */
     exerciseLog: jsonb('exercise_log').$type<Record<string, number>>(),
     notes: text('notes'),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('sessions_user_date_idx').on(t.userId, t.date)],
 );
@@ -278,7 +288,7 @@ export const dailyLogs = pgTable(
      */
     supplements: jsonb('supplements').$type<Record<string, boolean>>().notNull().default({}),
     notes: text('notes'),
-    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.date] })],
 );
@@ -310,7 +320,7 @@ export const nutritionEntries = pgTable(
       .notNull()
       .references(() => foodItems.id, { onDelete: 'cascade' }),
     servings: numeric('servings', { precision: 5, scale: 2 }).notNull().default('1'),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('nutrition_user_date_idx').on(t.userId, t.date)],
 );
@@ -326,7 +336,7 @@ export const weeklyChecks = pgTable(
     waistCm: real('waist_cm'),
     restingHr: integer('resting_hr'),
     capability: jsonb('capability').$type<Record<string, number>>().notNull().default({}),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.date] })],
 );
@@ -339,7 +349,7 @@ export const strengthProgress = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     exerciseId: text('exercise_id').notNull(),
     sessionsCompleted: integer('sessions_completed').notNull().default(0),
-    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.exerciseId] })],
 );
@@ -380,9 +390,9 @@ export const regimenItems = pgTable(
     remindersEnabled: boolean('reminders_enabled').notNull().default(true),
     notes: text('notes'),
     /** Archived rather than deleted, so history and adherence survive. */
-    archivedAt: timestamp('archived_at'),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('regimen_items_user_idx').on(t.userId)],
 );
@@ -405,7 +415,7 @@ export const regimenEvents = pgTable(
     /** taken | skipped. There is no third value: a gap stays a gap. */
     status: text('status').notNull(),
     /** When the tick actually happened, which is the point of a separate row. */
-    recordedAt: timestamp('recorded_at').notNull().defaultNow(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index('regimen_events_user_date_idx').on(t.userId, t.dueDate),
@@ -429,8 +439,8 @@ export const pushSubscriptions = pgTable(
     p256dh: text('p256dh').notNull(),
     auth: text('auth').notNull(),
     userAgent: text('user_agent'),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-    lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('push_subs_user_idx').on(t.userId)],
 );
@@ -451,10 +461,10 @@ export const reminders = pgTable(
     /** Identifies the occurrence within its kind. */
     key: text('key').notNull(),
     attempts: integer('attempts').notNull().default(0),
-    lastSentAt: timestamp('last_sent_at'),
-    snoozedUntil: timestamp('snoozed_until'),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+    snoozedUntil: timestamp('snoozed_until', { withTimezone: true }),
     /** Set when the user acted from the notification — stop nudging. */
-    resolvedAt: timestamp('resolved_at'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   },
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.key] })],
 );

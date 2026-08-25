@@ -36,6 +36,13 @@
       "when": 1787599076769,
       "tag": "0004_session_time_clear_of_quiet_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787634322414,
+      "tag": "0005_brief_wolf_cub",
+      "breakpoints": true
     }
   ]
 }
