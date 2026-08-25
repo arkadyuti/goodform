@@ -1,18 +1,33 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { startOfWeek, type WeeklyReview } from '@goodform/shared';
-import { useDailyRange, useProgress, useRegimenHistory, useTrends, useWeeklyReview } from '../api/hooks.ts';
+import {
+  useDailyRange,
+  useProgress,
+  useRegimenHistory,
+  useTrends,
+  useWeeklyReview,
+} from '../api/hooks.ts';
 import { shiftDays, shortDate, today } from '../lib/date.ts';
-import { Card, Eyebrow, Note } from '../components/ui.tsx';
+import { Card, Eyebrow, LoadFailed, Note } from '../components/ui.tsx';
 import { AdherenceStrip, DiscomfortChart, TrendChart } from '../components/Chart.tsx';
 import { formatMinutes } from '../components/IntervalRibbon.tsx';
 
 export function Progress() {
-  const { data } = useProgress();
+  const { data, isError, isFetching, refetch } = useProgress();
   const { data: trends } = useTrends();
   const { data: rangeData } = useDailyRange(shiftDays(today(), -28));
   const { data: regimen } = useRegimenHistory(shiftDays(today(), -27));
 
+  // Only when there is nothing to show. A refetch that fails while a good copy
+  // is still cached should leave the good copy on screen — replacing it with an
+  // error is a downgrade, and the runner did not ask for one.
+  if (isError && !data)
+    return (
+      <div className="pt-6">
+        <LoadFailed what="your progress" retrying={isFetching} onRetry={() => void refetch()} />
+      </div>
+    );
   if (!data) return <p className="eyebrow pt-6">Loading</p>;
 
   const { adherence, longestRunSec } = data;
@@ -155,7 +170,10 @@ export function Progress() {
             </div>
             <div>
               <p className="tabular text-3xl leading-none" style={{ fontWeight: 800 }}>
-                {logs.filter((l) => l.cigarettes === 0 && l.alcoholUnits === 0 && l.beers === 0).length}
+                {
+                  logs.filter((l) => l.cigarettes === 0 && l.alcoholUnits === 0 && l.beers === 0)
+                    .length
+                }
               </p>
               <p className="mt-1 text-[0.8125rem] text-ink-soft">clear days</p>
             </div>
@@ -185,7 +203,10 @@ export function Progress() {
               </li>
             ))}
           </ul>
-          <Link to="/regimen" className="mt-3 inline-block text-[0.875rem] text-run underline underline-offset-4">
+          <Link
+            to="/regimen"
+            className="mt-3 inline-block text-[0.875rem] text-run underline underline-offset-4"
+          >
             Manage your list
           </Link>
         </Card>
@@ -194,8 +215,8 @@ export function Progress() {
       <ExportCard />
 
       <Note>
-        Waist and resting heart rate respond long before weight does. Weight holding steady while your waist
-        comes down is the result to want.
+        Waist and resting heart rate respond long before weight does. Weight holding steady while
+        your waist comes down is the result to want.
       </Note>
     </div>
   );
@@ -275,10 +296,7 @@ function ReviewBody({ review }: { review: WeeklyReview }) {
             />
           )}
           {habits.loggedDays > 0 && (
-            <Line
-              label="Clear days"
-              value={`${habits.clearDays} of ${habits.loggedDays} logged`}
-            />
+            <Line label="Clear days" value={`${habits.clearDays} of ${habits.loggedDays} logged`} />
           )}
           {habits.sleepAvgHours !== null && (
             <Line label="Sleep" value={`${habits.sleepAvgHours.toFixed(1)} hours average`} />
@@ -287,7 +305,9 @@ function ReviewBody({ review }: { review: WeeklyReview }) {
             <Line
               label="Weight"
               value={`${measurements.weightKg} kg${
-                measurements.weightDelta !== null ? ` (${measurements.weightDelta > 0 ? '+' : ''}${measurements.weightDelta})` : ''
+                measurements.weightDelta !== null
+                  ? ` (${measurements.weightDelta > 0 ? '+' : ''}${measurements.weightDelta})`
+                  : ''
               }`}
             />
           )}
@@ -357,7 +377,8 @@ export function ExportCard() {
     <Card>
       <Eyebrow>Take your data</Eyebrow>
       <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
-        Everything here is yours. The JSON file is the complete record; the CSVs open in any spreadsheet.
+        Everything here is yours. The JSON file is the complete record; the CSVs open in any
+        spreadsheet.
       </p>
 
       <a

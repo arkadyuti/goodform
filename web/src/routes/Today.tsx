@@ -17,7 +17,7 @@ import {
   useWeekReview,
 } from '../api/hooks.ts';
 import { dayName, scheduleFor, shiftDays, today } from '../lib/date.ts';
-import { Button, Card, Eyebrow, Note, Stepper } from '../components/ui.tsx';
+import { Button, Card, Eyebrow, LoadFailed, Note, Stepper } from '../components/ui.tsx';
 import { DueNow } from '../components/DueNow.tsx';
 import { Fuelling } from '../components/Fuelling.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
@@ -28,7 +28,12 @@ export function Today() {
   const date = today();
   const navigate = useNavigate();
   const { data: profileData } = useProfile();
-  const { data: planData, isPending: planPending } = usePlan();
+  const {
+    data: planData,
+    isPending: planPending,
+    isError: planFailed,
+    refetch: refetchPlan,
+  } = usePlan();
   const { data: logData, isPending: logPending } = useDailyLog(date);
   const { data: nutritionData, isPending: nutritionPending } = useNutrition(date);
   const { data: sessionData, isPending: sessionsPending } = useSessions(shiftDays(date, -7));
@@ -186,7 +191,17 @@ export function Today() {
         />
       )}
 
-      {ready && !plan && (
+      {/*
+        A failed request and an account with no plan look identical from the
+        data alone — `planData` is undefined either way — so the error is
+        checked first. Telling someone mid-block that they have not started is
+        worse than telling them the network is having a moment.
+      */}
+      {ready && planFailed && !plan && (
+        <LoadFailed what="your plan" onRetry={() => void refetchPlan()} />
+      )}
+
+      {ready && !planFailed && !plan && (
         <Card>
           <Eyebrow>No plan yet</Eyebrow>
           <p className="mt-2 leading-snug">

@@ -28,7 +28,16 @@ import {
 } from '../api/hooks.ts';
 import { shiftDays, shortDate, today } from '../lib/date.ts';
 import { AdherenceStrip } from '../components/Chart.tsx';
-import { Button, Card, Choices, Eyebrow, Field, Note, TextInput } from '../components/ui.tsx';
+import {
+  Button,
+  Card,
+  Choices,
+  Eyebrow,
+  Field,
+  LoadFailed,
+  Note,
+  TextInput,
+} from '../components/ui.tsx';
 
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -36,7 +45,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 export function Regimen() {
   const [editing, setEditing] = useState<RegimenItem | 'new' | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const { data, isPending } = useRegimenItems(showArchived);
+  const { data, isPending, isError, isFetching, refetch } = useRegimenItems(showArchived);
   const { data: history } = useRegimenHistory(shiftDays(today(), -27));
 
   const items = data?.items ?? [];
@@ -70,7 +79,11 @@ export function Regimen() {
         <div className="min-h-[40dvh]" aria-busy="true" aria-label="Loading your list" />
       )}
 
-      {!isPending && live.length === 0 && (
+      {isError && items.length === 0 && (
+        <LoadFailed what="your list" retrying={isFetching} onRetry={() => void refetch()} />
+      )}
+
+      {!isPending && !isError && live.length === 0 && (
         <Card>
           <Eyebrow>Nothing here yet</Eyebrow>
           <p className="mt-2 leading-snug">

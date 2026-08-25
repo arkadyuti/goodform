@@ -255,3 +255,35 @@ export function Note({
     </p>
   );
 }
+
+/**
+ * What a screen shows when its data could not be fetched.
+ *
+ * The alternative, and what these screens used to do, is render the empty
+ * state: a server error told the runner "you haven't started yet", which is
+ * indistinguishable from having lost everything. Saying the request failed is
+ * both true and far less alarming.
+ */
+export function LoadFailed({
+  what,
+  onRetry,
+  retrying = false,
+}: {
+  what: string;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
+  return (
+    <Card>
+      <Eyebrow>Could not load {what}</Eyebrow>
+      <p className="mt-2 leading-snug">
+        Nothing is lost — this is a problem reaching the server, not a problem with your data.
+      </p>
+      {onRetry && (
+        <Button variant="secondary" className="mt-3" disabled={retrying} onClick={onRetry}>
+          {retrying ? 'Trying' : 'Try again'}
+        </Button>
+      )}
+    </Card>
+  );
+}
