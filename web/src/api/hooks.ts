@@ -7,6 +7,7 @@ import type {
   DoseStatus,
   FoodItem,
   Goal,
+  Prescription,
   Profile,
   RegimenItem,
   ScreeningFlag,
@@ -15,6 +16,7 @@ import type {
 } from '@goodform/shared';
 import { today } from '../lib/date.ts';
 import { api } from './client.ts';
+import { expectPlan, expectProfile, expectTrends } from './shapes.ts';
 
 export interface ServerProfile extends Profile {
   userId: string;
@@ -100,7 +102,8 @@ export interface SessionRow {
   discomfortLocation: string | null;
   discomfortSeverity: number | null;
   durationSec: number | null;
-  prescription: { runSec: number; walkSec: number; reps: number } | null;
+  /** The shared type, not a copy of it — the two had already drifted. */
+  prescription: Prescription | null;
 }
 
 /**
@@ -150,11 +153,13 @@ export function useProfile() {
   return useQuery({
     queryKey: keys.profile,
     queryFn: () =>
-      api.get<{
-        profile: ServerProfile | null;
-        screening: { flags: ScreeningFlag[]; acknowledgedAt: string | null } | null;
-        settings: Settings | null;
-      }>('/profile'),
+      api.get<unknown>('/profile').then((body) =>
+        expectProfile<{
+          profile: ServerProfile | null;
+          screening: { flags: ScreeningFlag[]; acknowledgedAt: string | null } | null;
+          settings: Settings | null;
+        }>(body),
+      ),
     retry: false,
   });
 }
@@ -162,7 +167,10 @@ export function useProfile() {
 export function usePlan() {
   return useQuery({
     queryKey: keys.plan,
-    queryFn: () => api.get<{ plan: PlanRow | null; weeks: PlanWeekRow[] }>('/plan'),
+    queryFn: () =>
+      api
+        .get<unknown>('/plan')
+        .then((body) => expectPlan<{ plan: PlanRow | null; weeks: PlanWeekRow[] }>(body)),
   });
 }
 
@@ -484,7 +492,10 @@ export function useTrends() {
   return useQuery({
     queryKey: keys.trends,
     // The server has no idea what day it is where the runner is standing.
-    queryFn: () => api.get<Trends>(`/progress/trends?date=${today()}`),
+    queryFn: () =>
+      api
+        .get<unknown>(`/progress/trends?date=${today()}`)
+        .then((body) => expectTrends<Trends>(body)),
   });
 }
 
@@ -758,7 +769,8 @@ export interface CalendarDay {
     discomfortSeverity: number | null;
     durationSec: number | null;
     intervalsCompleted: number | null;
-    prescription: { runSec: number; walkSec: number; reps: number } | null;
+    /** The shared type, not a copy of it — the two had already drifted. */
+    prescription: Prescription | null;
   }[];
   log: DailyLogRow | null;
   check: { weightKg: number | null; waistCm: number | null; restingHr: number | null } | null;

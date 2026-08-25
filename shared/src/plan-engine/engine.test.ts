@@ -302,15 +302,7 @@ describe('block reassessment', () => {
 
   const finished = (over: Partial<WorkoutSession> = {}) =>
     session({
-      prescription: {
-        index: 8,
-        runSec: 540,
-        walkSec: 60,
-        reps: 2,
-        sessionsPerWeek: 3,
-        isDeload: false,
-        totalRunSec: 3240,
-      },
+      prescription: { runSec: 540, walkSec: 60, reps: 2 },
       ...over,
     });
 
@@ -406,7 +398,7 @@ describe('a session declined on purpose', () => {
     date: '2026-08-24',
     type: 'run',
     planWeek: 3,
-    prescription: week,
+    prescription: { runSec: week.runSec, walkSec: week.walkSec, reps: week.reps },
     completion,
     effort: null,
     discomfort: null,

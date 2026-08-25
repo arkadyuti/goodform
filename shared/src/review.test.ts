@@ -9,7 +9,7 @@ function session(over: Partial<WorkoutSession> = {}): WorkoutSession {
     date: '2026-08-24',
     type: 'run',
     planWeek: 3,
-    prescription: { index: 3, runSec: 300, walkSec: 60, reps: 4, sessionsPerWeek: 3, isDeload: false, totalRunSec: 3600 },
+    prescription: { runSec: 300, walkSec: 60, reps: 4 },
     completion: 'full',
     effort: 3,
     discomfort: null,

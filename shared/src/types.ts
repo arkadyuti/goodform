@@ -204,12 +204,27 @@ export interface Discomfort {
   severity: 1 | 2 | 3 | 4 | 5;
 }
 
+/**
+ * What a session asked for, recorded alongside what happened.
+ *
+ * Three fields, not a whole `PlanWeek` — the type said `PlanWeek` while every
+ * writer in the app sent exactly these three, so anything reading `index` or
+ * `isDeload` off a stored prescription was reading a field that was never
+ * written. Narrowing the type to what is actually stored makes that a compile
+ * error instead of an `undefined` at runtime.
+ */
+export interface Prescription {
+  runSec: number;
+  walkSec: number;
+  reps: number;
+}
+
 export interface WorkoutSession {
   id: string;
   date: string;
   type: SessionType;
   planWeek: number | null;
-  prescription: PlanWeek | null;
+  prescription: Prescription | null;
   completion: Completion;
   effort: number | null;
   discomfort: Discomfort | null;

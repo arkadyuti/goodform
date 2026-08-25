@@ -12,7 +12,16 @@ const sessionSchema = z.object({
   type: z.enum(['run', 'strength', 'baseline']),
   planId: z.string().uuid().nullish(),
   planWeek: z.number().int().nullish(),
-  prescription: z.unknown().nullish(),
+  // Was `z.unknown()`, so whatever a client sent went into the jsonb column
+  // verbatim and came back out typed as something it might not be. The charts
+  // read `runSec` off it.
+  prescription: z
+    .object({
+      runSec: z.number().int().min(0).max(36_000),
+      walkSec: z.number().int().min(0).max(36_000),
+      reps: z.number().int().min(0).max(100),
+    })
+    .nullish(),
   completion: z.enum(['full', 'partial', 'skipped']),
   effort: z.number().int().min(1).max(5).nullish(),
   discomfort: z
