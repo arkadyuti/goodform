@@ -37,6 +37,13 @@ export default defineConfig({
         globIgnores: ['**/push-sw.js'],
         // A session already open must keep running with no network (FR-4.6).
         navigateFallback: '/index.html',
+        // Client-side routes fall back to the shell; anything under /api must
+        // not. Without this the worker answers *every* navigation from
+        // precache — including Google's redirect back to
+        // /api/auth/callback/google, which the server then never sees, so the
+        // OAuth code is never exchanged and the app simply shows the login
+        // page again. Same for the export download, which is a navigation too.
+        navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
