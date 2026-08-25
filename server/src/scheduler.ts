@@ -91,11 +91,37 @@ async function tickUser(settingsRow: SettingsRow, now: Date): Promise<void> {
   const prefs = prefsFrom(settingsRow);
   const { date: localDate, time: localTime } = localParts(now, prefs.timezone);
 
+  // Yesterday is loaded alongside today because a snooze taken late at night
+  // lands after midnight, and the dose it belongs to is yesterday's.
+  const yesterday = addDays(localDate, -1);
   const [items, events, records] = await Promise.all([
     loadActiveItems(userId),
-    loadEvents(userId, localDate, localDate),
+    loadEvents(userId, yesterday, localDate),
     remindersFor(userId, prefs.timezone),
   ]);
+
+  /**
+   * Today's doses, plus yesterday's only when a snooze is waiting on one.
+   *
+   * Snoozing at 23:50 for half an hour sets the reminder to resume at 00:20 —
+   * by which time the dose is on the previous day, and that day is not in this
+   * list, so the nudge the runner explicitly asked to see again never came
+   * back. Nothing else can fire for a past date: a first nudge needs the dose
+   * time to have passed *within* the catch-up window, and escalation needs the
+   * earlier nudge to have been sent today.
+   */
+  const snoozeFromYesterday = [...records.values()].some(
+    (record) =>
+      !record.resolved &&
+      record.snoozedUntilDate === localDate &&
+      record.key.includes(`:${yesterday}:`),
+  );
+  const doses = snoozeFromYesterday
+    ? [
+        ...doseStates(items, events, yesterday, '23:59'),
+        ...doseStates(items, events, localDate, localTime),
+      ]
+    : doseStates(items, events, localDate, localTime);
 
   // Is a session outstanding today?
   const scheduled = scheduleFor(localDate);
@@ -133,7 +159,7 @@ async function tickUser(settingsRow: SettingsRow, now: Date): Promise<void> {
     prefs,
     localDate,
     localTime,
-    doses: doseStates(items, events, localDate, localTime),
+    doses,
     sessionDue,
     sessionKind: scheduled === 'rest' ? null : scheduled,
     weeklyCheckDue,

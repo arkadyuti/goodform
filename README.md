@@ -32,9 +32,9 @@ eating harder, the numbers go away until you ask for them back.
 
 **Holds your list.** Supplements and medicines, on separate footings. A missed
 shake is nothing; a missed course of antibiotics is not, so only medicines get a
-second nudge, only medicines are allowed through quiet hours they were
-deliberately scheduled into, and a medicine's name never reaches a lock screen
-unless you say so. Courses count down and stop on their own.
+second nudge, and a medicine's name never reaches a lock screen unless you say
+so. A dose of either kind whose time you deliberately set inside your own quiet
+hours still arrives — quiet hours are there to stop what you did not ask for. Courses count down and stop on their own.
 
 **Shows what changed.** Longest interval, resting heart rate, waist, weight and
 strength level, each on its own chart because they share no scale. A weekly

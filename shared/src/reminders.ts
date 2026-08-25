@@ -201,10 +201,20 @@ export function dueReminders(context: ReminderContext): DueReminder[] {
       if (record?.resolved) continue;
 
       const medicine = dose.item.kind === 'medicine';
-      // A dose the user deliberately scheduled inside their own quiet hours
-      // still fires; nothing else does.
+      /**
+       * Quiet hours exist to stop the app interrupting unbidden. A dose whose
+       * time the runner deliberately set inside them is not an interruption —
+       * it is the thing they asked to be reminded about, and the app told them
+       * where it fell when they chose it.
+       *
+       * This used to be granted to medicines only, which meant a supplement at
+       * 22:30 with quiet hours from 22:00 produced nothing, ever, with no way
+       * to find out why. Medicines still get more than supplements: the second
+       * nudge below is theirs alone, and that one is still never sent inside
+       * quiet hours.
+       */
       const scheduledInQuiet = quiet(prefs, dose.dueTime);
-      const mayInterrupt = !nowQuiet || (medicine && scheduledInQuiet);
+      const mayInterrupt = !nowQuiet || scheduledInQuiet;
 
       const resumingSnooze =
         snoozeReady(record, context) && record !== undefined && snoozeUnsent(record);

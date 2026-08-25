@@ -32,7 +32,10 @@ function item(over: Partial<RegimenItem> = {}): RegimenItem {
   };
 }
 
-function context(over: Partial<ReminderContext> = {}, prefs: Partial<ReminderPrefs> = {}): ReminderContext {
+function context(
+  over: Partial<ReminderContext> = {},
+  prefs: Partial<ReminderPrefs> = {},
+): ReminderContext {
   const items = over.doses ? [] : [item()];
   const localDate = over.localDate ?? '2026-08-24';
   const localTime = over.localTime ?? '08:05';
@@ -94,7 +97,16 @@ describe('dose reminders', () => {
     for (const status of ['taken', 'skipped'] as const) {
       const doses = doseStates(
         items,
-        [{ id: 'e', itemId: 'i1', dueDate: '2026-08-24', dueTime: '08:00', status, recordedAt: '' }],
+        [
+          {
+            id: 'e',
+            itemId: 'i1',
+            dueDate: '2026-08-24',
+            dueTime: '08:00',
+            status,
+            recordedAt: '',
+          },
+        ],
         '2026-08-24',
         '08:05',
       );
@@ -147,24 +159,44 @@ describe('escalation', () => {
 });
 
 describe('quiet hours', () => {
-  it('holds a supplement scheduled inside quiet hours', () => {
-    const doses = doseStates([item({ kind: 'supplement', times: ['23:00'] })], [], '2026-08-24', '23:05');
-    expect(dueReminders(context({ doses, localTime: '23:05' }))).toEqual([]);
+  it('delivers anything the runner deliberately scheduled there', () => {
+    // Both kinds. A time chosen inside your own quiet hours is a request, not
+    // an interruption — and holding supplements meant a 22:30 vitamin produced
+    // nothing at all, on any day, with nothing saying why.
+    for (const kind of ['supplement', 'medicine'] as const) {
+      const doses = doseStates([item({ kind, times: ['23:00'] })], [], '2026-08-24', '23:05');
+      expect(dueReminders(context({ doses, localTime: '23:05' })), kind).toHaveLength(1);
+    }
   });
 
-  it('still delivers a medicine the user deliberately scheduled there', () => {
-    const doses = doseStates([item({ times: ['23:00'] })], [], '2026-08-24', '23:05');
-    expect(dueReminders(context({ doses, localTime: '23:05' }))).toHaveLength(1);
+  it('still holds a dose whose time falls outside quiet hours when the tick is inside them', () => {
+    // Scheduled for 21:50, quiet hours from 22:00, and the tick lands at 22:20.
+    // Nothing was asked of this moment, so nothing arrives in it.
+    const doses = doseStates(
+      [item({ kind: 'supplement', times: ['21:50'] })],
+      [],
+      '2026-08-24',
+      '22:20',
+    );
+    expect(dueReminders(context({ doses, localTime: '22:20' }))).toEqual([]);
   });
 
   it('never escalates inside quiet hours', () => {
     const doses = doseStates([item({ times: ['23:00'] })], [], '2026-08-24', '23:35');
-    const records = new Map([['regimen:i1:2026-08-24:23:00', record({ key: 'i1:2026-08-24:23:00', lastSentMinutes: 23 * 60 })]]);
+    const records = new Map([
+      [
+        'regimen:i1:2026-08-24:23:00',
+        record({ key: 'i1:2026-08-24:23:00', lastSentMinutes: 23 * 60 }),
+      ],
+    ]);
     expect(dueReminders(context({ doses, localTime: '23:35', records }))).toEqual([]);
   });
 
   it('suppresses the session nudge', () => {
-    const quiet = context({ sessionDue: true, sessionKind: 'run', localTime: '06:00', doses: [] }, { sessionReminderTime: '06:00' });
+    const quiet = context(
+      { sessionDue: true, sessionKind: 'run', localTime: '06:00', doses: [] },
+      { sessionReminderTime: '06:00' },
+    );
     expect(dueReminders(quiet)).toEqual([]);
   });
 });
@@ -208,21 +240,37 @@ describe('session and weekly check reminders', () => {
     expect(due).toHaveLength(1);
     expect(due[0]!.title).toBe('Running day');
     // No escalation path exists for a session, at any later time.
-    const records = new Map([['session:2026-08-24', record({ kind: 'session', key: '2026-08-24' })]]);
+    const records = new Map([
+      ['session:2026-08-24', record({ kind: 'session', key: '2026-08-24' })],
+    ]);
     expect(
-      dueReminders(context({ ...noDoses, sessionDue: true, sessionKind: 'run', localTime: '09:00', records })),
+      dueReminders(
+        context({ ...noDoses, sessionDue: true, sessionKind: 'run', localTime: '09:00', records }),
+      ),
     ).toEqual([]);
   });
 
   it('says nothing about a session already logged', () => {
-    expect(dueReminders(context({ ...noDoses, sessionDue: false, localTime: '07:35' }))).toEqual([]);
+    expect(dueReminders(context({ ...noDoses, sessionDue: false, localTime: '07:35' }))).toEqual(
+      [],
+    );
   });
 
   it('asks for the weekly check only on the chosen day', () => {
     // 2026-08-23 is a Sunday, 2026-08-24 a Monday.
-    const sunday = context({ ...noDoses, weeklyCheckDue: true, localDate: '2026-08-23', localTime: '09:35' });
+    const sunday = context({
+      ...noDoses,
+      weeklyCheckDue: true,
+      localDate: '2026-08-23',
+      localTime: '09:35',
+    });
     expect(dueReminders(sunday)).toHaveLength(1);
-    const monday = context({ ...noDoses, weeklyCheckDue: true, localDate: '2026-08-24', localTime: '09:35' });
+    const monday = context({
+      ...noDoses,
+      weeklyCheckDue: true,
+      localDate: '2026-08-24',
+      localTime: '09:35',
+    });
     expect(dueReminders(monday)).toEqual([]);
   });
 });
@@ -235,7 +283,11 @@ describe('notification copy', () => {
   });
 
   it('shows the name only when explicitly asked to', () => {
-    const copy = reminderCopy(item(), { ...DEFAULT_REMINDER_PREFS, hideNamesInNotifications: false }, 1);
+    const copy = reminderCopy(
+      item(),
+      { ...DEFAULT_REMINDER_PREFS, hideNamesInNotifications: false },
+      1,
+    );
     expect(copy.title).toBe('Amoxicillin');
     expect(copy.body).toContain('1 capsule');
   });
@@ -243,9 +295,129 @@ describe('notification copy', () => {
   it('never phrases anything as a missed dose', () => {
     for (const attempt of [1, 2]) {
       for (const hide of [true, false]) {
-        const copy = reminderCopy(item(), { ...DEFAULT_REMINDER_PREFS, hideNamesInNotifications: hide }, attempt);
+        const copy = reminderCopy(
+          item(),
+          { ...DEFAULT_REMINDER_PREFS, hideNamesInNotifications: hide },
+          attempt,
+        );
         expect(`${copy.title} ${copy.body}`.toLowerCase()).not.toMatch(/missed|forgot|failed/);
       }
     }
+  });
+});
+
+describe('daylight saving', () => {
+  // The scheduler resolves a wall clock through the user's zone every tick, so
+  // on a spring-forward day the local clock jumps 01:59 → 03:00 and a dose set
+  // for 02:30 has no minute of its own to fire in. The catch-up window is what
+  // rescues it; without one the dose is skipped in silence, on a day nobody
+  // remembers is different.
+  function localTimesOn(date: string, timezone: string): string[] {
+    const times: string[] = [];
+    const [y, m, d] = date.split('-').map(Number);
+    const start = Date.UTC(y!, m! - 1, d! - 1, 0, 0, 0);
+    for (let i = 0; i < 60 * 48; i++) {
+      const instant = new Date(start + i * 60_000);
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(instant);
+      if (parts !== date) continue;
+      times.push(
+        new Intl.DateTimeFormat('en-GB', {
+          timeZone: timezone,
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        }).format(instant),
+      );
+    }
+    return times;
+  }
+
+  it('still delivers a dose set for an hour the clock skips', () => {
+    const date = '2026-03-08'; // America/New_York springs forward, 02:00 → 03:00
+    const clock = localTimesOn(date, 'America/New_York');
+    expect(clock).not.toContain('02:30'); // the hour genuinely does not exist
+
+    const records = new Map<string, ReminderRecord>();
+    const fired = clock.filter((localTime) => {
+      const doses = doseStates(
+        [item({ times: ['02:30'], anchorDate: '2026-01-01' })],
+        [],
+        date,
+        localTime,
+      );
+      const due = dueReminders(context({ doses, localDate: date, localTime, records }));
+      for (const reminder of due) {
+        records.set(`${reminder.kind}:${reminder.key}`, {
+          kind: reminder.kind,
+          key: reminder.key,
+          attempts: reminder.attempt,
+          lastSentDate: date,
+          lastSentMinutes: 0,
+          snoozedUntilDate: null,
+          snoozedUntilMinutes: null,
+          resolved: false,
+        });
+      }
+      return due.length > 0;
+    });
+
+    expect(fired.length).toBeGreaterThan(0);
+  });
+});
+
+describe('a snooze that crosses midnight', () => {
+  // Snoozing a 23:50 dose for half an hour sets it to resume at 00:20, by which
+  // time the dose belongs to the previous day. The scheduler is what has to
+  // hand yesterday's dose back in; this pins the half that decides what to do
+  // with it once it arrives.
+  const yesterday = '2026-08-24';
+  const today = '2026-08-25';
+  const key = `i1:${yesterday}:23:50`;
+
+  const snoozed = () =>
+    new Map<string, ReminderRecord>([
+      [
+        `regimen:${key}`,
+        {
+          kind: 'regimen',
+          key,
+          attempts: 1,
+          lastSentDate: yesterday,
+          lastSentMinutes: 23 * 60 + 50,
+          snoozedUntilDate: today,
+          snoozedUntilMinutes: 20,
+          resolved: false,
+        },
+      ],
+    ]);
+
+  it('resumes once yesterday’s dose is in the context', () => {
+    const doses = doseStates([item({ times: ['23:50'] })], [], yesterday, '23:59');
+    const due = dueReminders(
+      context({ doses, localDate: today, localTime: '00:20', records: snoozed() }),
+    );
+    expect(due).toHaveLength(1);
+    expect(due[0]!.key).toBe(key);
+  });
+
+  it('stays quiet before the snooze is up', () => {
+    const doses = doseStates([item({ times: ['23:50'] })], [], yesterday, '23:59');
+    const due = dueReminders(
+      context({ doses, localDate: today, localTime: '00:05', records: snoozed() }),
+    );
+    expect(due).toEqual([]);
+  });
+
+  it('does not turn a stale dose into a fresh nudge', () => {
+    // Nothing snoozed, yesterday's dose simply never ticked. Handing it in must
+    // not produce a first nudge the morning after.
+    const doses = doseStates([item({ times: ['23:50'] })], [], yesterday, '23:59');
+    const due = dueReminders(context({ doses, localDate: today, localTime: '09:00' }));
+    expect(due).toEqual([]);
   });
 });

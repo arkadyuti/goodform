@@ -591,14 +591,12 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
               )}
               {silenced.length > 0 && (
                 <div className="mt-2.5">
-                  <Note tone="alert">
+                  <Note>
                     {silenced.length === 1
                       ? `${silenced[0]} falls`
                       : `${silenced.join(' and ')} fall`}{' '}
-                    inside your quiet hours ({quietStart}–{quietEnd}).{' '}
-                    {kind === 'medicine'
-                      ? 'A medicine you deliberately schedule there is still allowed through, so this will arrive.'
-                      : 'A supplement is not allowed to interrupt quiet hours, so no reminder will arrive — it will only appear on Today. Move the time, or shorten quiet hours in Settings.'}
+                    inside your quiet hours ({quietStart}–{quietEnd}). A time you set there counts
+                    as deliberate, so this reminder still arrives — nothing else will.
                   </Note>
                 </div>
               )}
