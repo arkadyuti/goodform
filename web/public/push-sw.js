@@ -82,6 +82,29 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
+  // Acting on one of these stops the nudge. `/api/push/dismiss` existed for
+  // exactly this and nothing ever called it, so a session or check-in reminder
+  // that had already been dealt with could still escalate.
+  if (!regimen && data.tag) {
+    const kind = String(data.tag).split(':')[0];
+    if (kind === 'session' || kind === 'weekly_check') {
+      event.waitUntil(
+        api('/api/push/dismiss', { kind, key: String(data.tag).slice(kind.length + 1) }),
+      );
+    }
+  }
+
+  // The same occurrence may be on screen more than once on this device — an
+  // escalation beside its first nudge. Dealing with it once should clear both.
+  if (data.tag) {
+    event.waitUntil(
+      self.registration
+        .getNotifications({ tag: data.tag })
+        .then((open) => open.forEach((n) => n.close()))
+        .catch(() => {}),
+    );
+  }
+
   // Tapping the body opens the app — reusing a window that is already there,
   // so a half-finished screen is not thrown away.
   const url = data.url || '/';

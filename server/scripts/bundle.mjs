@@ -28,7 +28,9 @@ await build({
   outdir,
   bundle: true,
   platform: 'node',
-  target: 'node22',
+  // Production runs Node 22; the floor is 20 so the same bundle also runs on a
+  // developer's machine that has not caught up yet.
+  target: 'node20',
   format: 'esm',
   sourcemap: true,
   // Optional native accelerators that pg and its transitive deps probe for at

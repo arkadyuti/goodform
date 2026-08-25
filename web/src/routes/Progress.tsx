@@ -137,10 +137,10 @@ export function Progress() {
             <TrendChart
               title="Strength level"
               points={trends.strengthLevel}
-              caption="Your prescription advances every third completed session, so this is capability rather than attendance."
+              caption="The work gets harder every third completed session, so this is what you can do rather than how often you turned up."
               goodDirection="up"
               zeroBased
-              empty="Finish a few strength sessions and the prescription starts advancing."
+              empty="Finish a few strength sessions and this starts to climb."
             />
           </Card>
 
@@ -227,12 +227,28 @@ export function Progress() {
 // ---------------------------------------------------------------------------
 
 function WeeklyReviewCard() {
-  const [week, setWeek] = useState(() => startOfWeek(shiftDays(today(), -7)));
+  // Last week is the useful default: it is finished, so there is something to
+  // review. On a new account there is no last week — the plan did not exist —
+  // and opening on it showed a stranger a report about a week they were not
+  // here for. Once the server says what the earliest reviewable week is, the
+  // view moves forward rather than sitting before the beginning.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const thisWeek = startOfWeek(today());
+  const lastWeek = startOfWeek(shiftDays(today(), -7));
+
+  // The first request asks about last week and, among other things, comes back
+  // with the earliest week there is anything to say about. If last week is
+  // before that, the view settles forward onto the real one. React Query
+  // dedupes the two calls whenever they name the same week, which is every
+  // time after the first few days.
+  const { data: probe } = useWeeklyReview(chosen ?? lastWeek);
+  const earliest = probe?.weeksAvailable.earliest;
+  const week = chosen ?? (earliest && lastWeek < earliest ? earliest : lastWeek);
   const { data, isPending } = useWeeklyReview(week);
 
-  const thisWeek = startOfWeek(today());
+  const setWeek = (next: (current: string) => string) => setChosen(next(week));
+
   const canGoForward = week < thisWeek;
-  const earliest = data?.weeksAvailable.earliest;
   const canGoBack = !earliest || week > earliest;
 
   return (

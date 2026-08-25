@@ -120,6 +120,26 @@ export async function adjustSupply(userId: string, itemId: string, delta: number
 }
 
 /** Clears any pending nudge for an occurrence the user has now acted on. */
+/**
+ * Puts a nudge back in play after the thing it was about was undone.
+ *
+ * Ticking a dose resolves its reminder, which is right. Un-ticking it left the
+ * resolution behind, so the dose was outstanding again and the app had quietly
+ * promised never to mention it — no first nudge, no escalation, nothing.
+ */
+export async function unresolveReminder(userId: string, kind: string, key: string): Promise<void> {
+  await db
+    .update(schema.reminders)
+    .set({ resolvedAt: null })
+    .where(
+      and(
+        eq(schema.reminders.userId, userId),
+        eq(schema.reminders.kind, kind),
+        eq(schema.reminders.key, key),
+      ),
+    );
+}
+
 export async function resolveReminder(userId: string, kind: string, key: string): Promise<void> {
   await db
     .insert(schema.reminders)

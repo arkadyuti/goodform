@@ -66,7 +66,10 @@ export function WeeklyCheckIn() {
               onChange={(e) => setWaist(e.target.value)}
             />
           </Field>
-          <Field label="Rest HR">
+          <Field
+            label="Resting heart rate"
+            hint="Beats per minute, taken before you get out of bed."
+          >
             <TextInput
               type="number"
               inputMode="numeric"

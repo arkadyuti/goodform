@@ -297,17 +297,37 @@ export async function sweepGuardrails(): Promise<void> {
 
 let running = false;
 
+/**
+ * How many users are evaluated at once.
+ *
+ * Serially, one user waiting on a slow query held up everyone behind them, and
+ * a tick that overran a minute simply skipped the next one. Small because the
+ * box has 512MB and a ten-connection pool — this is about not being blocked by
+ * one straggler, not about throughput.
+ */
+const TICK_CONCURRENCY = 5;
+
 async function tick(): Promise<void> {
   if (running) return; // A slow tick must not stack on the next one.
   running = true;
   try {
+    // One instant for the whole sweep, so two users in the same timezone are
+    // never evaluated against clocks a few hundred milliseconds apart.
     const now = new Date();
-    for (const settingsRow of await usersAwaitingReminders()) {
-      try {
-        await tickUser(settingsRow, now);
-      } catch (error) {
-        console.warn(`Reminder tick failed for ${settingsRow.userId}:`, error);
-      }
+    const users = await usersAwaitingReminders();
+
+    for (let i = 0; i < users.length; i += TICK_CONCURRENCY) {
+      await Promise.all(
+        users.slice(i, i + TICK_CONCURRENCY).map(async (settingsRow) => {
+          try {
+            await tickUser(settingsRow, now);
+          } catch (error) {
+            // One user's failure is theirs alone; everybody else still gets
+            // their reminders this minute.
+            console.warn(`Reminder tick failed for ${settingsRow.userId}:`, error);
+          }
+        }),
+      );
     }
   } finally {
     running = false;

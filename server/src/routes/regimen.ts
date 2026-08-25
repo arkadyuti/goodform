@@ -20,6 +20,7 @@ import { db, schema } from '../db/index.js';
 import { dateRangeFrom, limitFrom, requireAuth, todayFrom, type AppEnv } from '../middleware.js';
 import {
   adjustSupply,
+  unresolveReminder,
   loadActiveItems,
   loadAllItems,
   loadEvents,
@@ -302,6 +303,8 @@ export const regimenRoutes = new Hono<AppEnv>()
     if (!row) return c.json({ ok: true });
     if (row.status === 'taken') await adjustSupply(userId, row.itemId, 1);
     await db.delete(schema.regimenEvents).where(eq(schema.regimenEvents.id, row.id));
+    // The dose is outstanding again, so the reminder about it should be too.
+    await unresolveReminder(userId, 'regimen', `${row.itemId}:${row.dueDate}:${row.dueTime ?? ''}`);
     return c.json({ ok: true });
   })
 

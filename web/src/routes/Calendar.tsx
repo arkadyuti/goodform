@@ -160,8 +160,10 @@ export function Calendar() {
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.6875rem] text-ink-soft">
           <Key className="bg-run" label="run logged" />
           <Key className="bg-walk" label="strength logged" />
+          <Key className="bg-alert" label="discomfort 4 or above" />
           <Key className="bg-run/20" label="scheduled, nothing logged" />
           <Key className="bg-ink/25" label="habits logged" />
+          <Key className="bg-good" label="every dose taken" />
         </div>
       </Card>
 
@@ -815,7 +817,7 @@ function MeasurementBackfill({ day }: { day: CalendarDay }) {
             onChange={(e) => setWaist(e.target.value)}
           />
         </Field>
-        <Field label="Rest HR">
+        <Field label="Resting heart rate" hint="Beats per minute, taken before you get out of bed.">
           <TextInput
             type="number"
             inputMode="numeric"

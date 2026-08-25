@@ -411,6 +411,10 @@ function Intervals({
         ) : (
           <div className="flex gap-2.5">
             <button
+              type="button"
+              // The visible labels are a minus sign, a word and a word; read
+              // aloud out of context none of them says what they do.
+              aria-label="Give back 30 seconds"
               onClick={() => timerRef.current?.rewind(30)}
               className={`tap flex-1 rounded-2xl py-4 font-medium transition-colors ${
                 isRun
@@ -421,6 +425,8 @@ function Intervals({
               −30s
             </button>
             <button
+              type="button"
+              aria-label={running ? 'Pause the session' : 'Resume the session'}
               onClick={() => (running ? timerRef.current?.pause() : timerRef.current?.start())}
               className={`tap flex-[2] rounded-2xl py-4 text-lg font-semibold transition-colors ${
                 isRun ? 'bg-white text-ink hover:bg-white/92' : 'bg-ink text-chalk hover:bg-ink/90'
@@ -429,6 +435,8 @@ function Intervals({
               {running ? 'Pause' : 'Resume'}
             </button>
             <button
+              type="button"
+              aria-label="Skip to the next interval"
               onClick={() => timerRef.current?.skip()}
               className={`tap flex-1 rounded-2xl py-4 font-medium transition-colors ${
                 isRun

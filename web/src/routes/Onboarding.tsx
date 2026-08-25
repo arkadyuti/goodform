@@ -500,8 +500,19 @@ export function Onboarding() {
                 label: 'Run without stopping',
                 hint: 'The first real milestone for most beginners',
               },
-              { value: 'five_k', label: 'Get to 5K' },
-              { value: 'ten_k', label: 'Get to 10K' },
+              // The whole app is measured in minutes; naming a goal in
+              // kilometres without saying roughly what that is in minutes
+              // leaves the two halves unconnected.
+              {
+                value: 'five_k',
+                label: 'Get to 5K',
+                hint: 'Around 30 minutes of continuous running, at a beginner pace',
+              },
+              {
+                value: 'ten_k',
+                label: 'Get to 10K',
+                hint: 'Around an hour of continuous running — a long way from a standing start',
+              },
               {
                 value: 'general_fitness',
                 label: 'General fitness',
