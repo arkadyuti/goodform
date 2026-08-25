@@ -27,12 +27,20 @@ export function Fuelling({
     return () => window.clearInterval(timer);
   }, []);
 
-  const guidance = fuellingFor({ sessionTime, nowTime: clock, sessionType, dietaryPattern, sessionDone });
+  const guidance = fuellingFor({
+    sessionTime,
+    nowTime: clock,
+    sessionType,
+    dietaryPattern,
+    sessionDone,
+  });
   if (!guidance) return null;
 
   return (
     <Card className={guidance.window === 'recovery' ? 'border-run' : ''}>
-      <Eyebrow>{guidance.window === 'recovery' ? 'After the session' : 'Before the session'}</Eyebrow>
+      <Eyebrow as="h2">
+        {guidance.window === 'recovery' ? 'After the session' : 'Before the session'}
+      </Eyebrow>
       <p className="mt-1.5 text-[1.0625rem] leading-snug">{guidance.headline}</p>
       <ul className="mt-2.5 flex flex-col gap-2">
         {guidance.points.map((point) => (

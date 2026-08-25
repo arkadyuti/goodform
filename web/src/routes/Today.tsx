@@ -257,7 +257,7 @@ export function Today() {
 
       {ready && !planFailed && !plan && (
         <Card>
-          <Eyebrow>No plan yet</Eyebrow>
+          <Eyebrow as="h2">No plan yet</Eyebrow>
           <p className="mt-2 leading-snug">
             Finish your baseline assessment and GoodForm will build your block.
           </p>
@@ -270,7 +270,7 @@ export function Today() {
       {/* --- Protein ------------------------------------------------------ */}
       {ready && targetsWithdrawn && (
         <Card>
-          <Eyebrow>Food</Eyebrow>
+          <Eyebrow as="h2">Food</Eyebrow>
           <p className="mt-2 leading-snug">
             Logging still works. There is just no number attached to it at the moment.
           </p>
@@ -309,7 +309,7 @@ export function Today() {
       {/* --- Habits ------------------------------------------------------- */}
       {ready && (
         <Card>
-          <Eyebrow>Today's log</Eyebrow>
+          <Eyebrow as="h2">Today's log</Eyebrow>
           <div className="mt-1 divide-y divide-line">
             {tracked.includes('water') && (
               <Stepper
@@ -411,7 +411,7 @@ function WeekProgress({
   const left = Math.max(0, runsPlanned - runsDone);
   return (
     <Card>
-      <Eyebrow>Where week {weekIndex} stands</Eyebrow>
+      <Eyebrow as="h2">Where week {weekIndex} stands</Eyebrow>
       <p className="mt-1.5 flex items-baseline gap-2">
         <span className="tabular text-4xl" style={{ fontWeight: 800 }}>
           {runsDone}
@@ -525,7 +525,7 @@ function RestDay({
 
   return (
     <Card>
-      <Eyebrow>{nothingLoggedYet ? 'Nothing today' : 'Rest day'}</Eyebrow>
+      <Eyebrow as="h2">{nothingLoggedYet ? 'Nothing today' : 'Rest day'}</Eyebrow>
       <p className="mt-2 text-[1.0625rem] leading-snug">
         {nothingLoggedYet ? (
           <>
@@ -591,7 +591,7 @@ function WelcomeBack({
 
   return (
     <Card className="border-ink">
-      <Eyebrow>Welcome back</Eyebrow>
+      <Eyebrow as="h2">Welcome back</Eyebrow>
       <p className="mt-1.5 text-[1.0625rem] leading-snug">
         {gapDays} days since your last session. Nothing about that needs explaining.
       </p>
@@ -622,7 +622,7 @@ function WelcomeBack({
 function BlockCompleteBanner() {
   return (
     <Card className="border-ink">
-      <Eyebrow>Block complete</Eyebrow>
+      <Eyebrow as="h2">Block complete</Eyebrow>
       <p className="mt-1.5 text-[1.0625rem] leading-snug">
         You finished the block. What comes next is worth a minute's thought rather than an automatic
         next week.
@@ -649,7 +649,9 @@ function GuardrailNotice({
   const [open, setOpen] = useState(false);
   return (
     <Card className="border-walk bg-walk-wash">
-      <Eyebrow className="!text-walk-deep">A change to what is shown</Eyebrow>
+      <Eyebrow as="h2" className="!text-walk-deep">
+        A change to what is shown
+      </Eyebrow>
       <p className="mt-1.5 leading-relaxed">{WITHDRAWAL_MESSAGE}</p>
       {signals.length > 0 && (
         <>
@@ -678,7 +680,9 @@ function PausedBanner({ reason }: { reason: string | null }) {
   const decide = useWeekDecision();
   return (
     <Card className="border-alert bg-alert-wash">
-      <Eyebrow className="!text-alert">Progression paused</Eyebrow>
+      <Eyebrow as="h2" className="!text-alert">
+        Progression paused
+      </Eyebrow>
       <p className="mt-1.5 leading-snug text-ink">
         {reason ?? 'Resting until discomfort settles.'}
       </p>
@@ -719,7 +723,9 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
   if (gate.decision === 'advance') {
     return (
       <Card className="border-good">
-        <Eyebrow className="!text-good">Week done</Eyebrow>
+        <Eyebrow as="h2" className="!text-good">
+          Week done
+        </Eyebrow>
         <p className="mt-1.5 text-[1.0625rem] leading-snug">{gate.reason}</p>
         <Button full className="mt-3.5" onClick={() => decide.mutate({ action: 'advance' })}>
           Start next week
@@ -732,7 +738,7 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
 
   return (
     <Card className={tone === 'alert' ? 'border-alert bg-alert-wash' : 'border-walk bg-walk-wash'}>
-      <Eyebrow className={tone === 'alert' ? '!text-alert' : '!text-walk-deep'}>
+      <Eyebrow as="h2" className={tone === 'alert' ? '!text-alert' : '!text-walk-deep'}>
         {gate.decision === 'pause_medical'
           ? 'Stop and check'
           : discomfortDriven
@@ -802,7 +808,7 @@ function QuitSupport({
 
   return (
     <Card>
-      <Eyebrow>Holding</Eyebrow>
+      <Eyebrow as="h2">Holding</Eyebrow>
       <div className="mt-2 grid grid-cols-2 gap-4">
         {stats.smokeFree > 0 && (
           <Stat

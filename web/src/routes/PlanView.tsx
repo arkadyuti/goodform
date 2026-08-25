@@ -22,10 +22,7 @@ export function PlanView() {
   }
 
   // One shared time scale across the block, so the ribbons compare honestly.
-  const longestSessionSec = Math.max(
-    ...weeks.map((w) => (w.runSec + w.walkSec) * w.reps),
-    1,
-  );
+  const longestSessionSec = Math.max(...weeks.map((w) => (w.runSec + w.walkSec) * w.reps), 1);
 
   const runsThisWeek = (sessionData?.sessions ?? []).filter(
     (s) => s.planWeek === plan.currentWeek && s.type === 'run',
@@ -42,16 +39,17 @@ export function PlanView() {
             : `Week ${Math.min(plan.currentWeek, weeks.length)} of ${weeks.length}`}
         </h1>
         <p className="mt-2 leading-relaxed text-ink-soft">
-          Cobalt is running, amber is walking, drawn to scale. Watch the run blocks stretch while the walks stay
-          exactly where they are.
+          Cobalt is running, amber is walking, drawn to scale. Watch the run blocks stretch while
+          the walks stay exactly where they are.
         </p>
       </header>
 
       {plan.status === 'completed' && (
         <Card className="border-ink">
-          <Eyebrow>Block complete</Eyebrow>
+          <Eyebrow as="h2">Block complete</Eyebrow>
           <p className="mt-1.5 text-[1.0625rem] leading-snug">
-            You finished this block. The next one starts from where it left off rather than from scratch.
+            You finished this block. The next one starts from where it left off rather than from
+            scratch.
           </p>
           <Link
             to="/reassess"
@@ -67,7 +65,8 @@ export function PlanView() {
           <div className="flex items-baseline justify-between">
             <Eyebrow>This week</Eyebrow>
             <p className="tabular text-[0.8125rem] text-ink-soft">
-              {runsThisWeek.filter((s) => s.completion === 'full').length} of {currentWeek.sessionsPerWeek} runs done
+              {runsThisWeek.filter((s) => s.completion === 'full').length} of{' '}
+              {currentWeek.sessionsPerWeek} runs done
             </p>
           </div>
           <p className="mt-2 flex items-baseline gap-2">
@@ -89,12 +88,14 @@ export function PlanView() {
           </div>
           {currentWeek.repeats > 0 && (
             <p className="mt-2.5 text-[0.875rem] text-walk-deep">
-              Repeated {currentWeek.repeats} {currentWeek.repeats === 1 ? 'time' : 'times'} — the plan waiting for
-              your legs, which is what it is for.
+              Repeated {currentWeek.repeats} {currentWeek.repeats === 1 ? 'time' : 'times'} — the
+              plan waiting for your legs, which is what it is for.
             </p>
           )}
           {review && review.gate.decision !== 'advance' && (
-            <p className="mt-2.5 text-[0.875rem] leading-snug text-ink-soft">{review.gate.reason}</p>
+            <p className="mt-2.5 text-[0.875rem] leading-snug text-ink-soft">
+              {review.gate.reason}
+            </p>
           )}
         </Card>
       )}
@@ -116,7 +117,11 @@ export function PlanView() {
             >
               <span
                 className={`tabular w-7 shrink-0 text-right text-sm ${
-                  state === 'done' ? 'text-good' : state === 'current' ? 'font-bold text-ink' : 'text-ink-faint'
+                  state === 'done'
+                    ? 'text-good'
+                    : state === 'current'
+                      ? 'font-bold text-ink'
+                      : 'text-ink-faint'
                 }`}
               >
                 {state === 'done' ? '✓' : week.index}
@@ -142,7 +147,7 @@ export function PlanView() {
 
       {plan.conservatismReasons.length > 0 && (
         <Card>
-          <Eyebrow>Why this plan starts where it does</Eyebrow>
+          <Eyebrow as="h2">Why this plan starts where it does</Eyebrow>
           <ul className="mt-2.5 flex flex-col gap-2">
             {plan.conservatismReasons.map((reason) => (
               <li key={reason} className="flex gap-2.5 text-[0.9375rem] leading-snug text-ink-soft">
@@ -155,8 +160,8 @@ export function PlanView() {
       )}
 
       <Note>
-        Tendon and bone adaptation takes three to six months and cannot be rushed by effort. This single fact
-        prevents more injuries than any feature in this app.
+        Tendon and bone adaptation takes three to six months and cannot be rushed by effort. This
+        single fact prevents more injuries than any feature in this app.
       </Note>
     </div>
   );

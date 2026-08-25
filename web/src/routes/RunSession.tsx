@@ -215,7 +215,9 @@ function Warmup({
       </ul>
 
       <Card className="mt-5 border-run bg-run-wash">
-        <Eyebrow className="!text-run-deep">Today's cue</Eyebrow>
+        <Eyebrow as="h2" className="!text-run-deep">
+          Today's cue
+        </Eyebrow>
         <p className="mt-1 font-semibold">{cue.title}</p>
         <p className="mt-1 text-[0.9375rem] leading-snug text-ink-soft">{cue.body}</p>
       </Card>

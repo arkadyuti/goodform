@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import {
   severityHint,
@@ -276,7 +276,7 @@ function DayEditor({ day, isFuture }: { day: CalendarDay; isFuture: boolean }) {
   if (isFuture) {
     return (
       <Card>
-        <Eyebrow>{full}</Eyebrow>
+        <Eyebrow as="h2">{full}</Eyebrow>
         <p className="mt-2 leading-snug text-ink-soft">
           Still to come. There is nothing to fill in for a day that has not happened.
         </p>
@@ -287,7 +287,7 @@ function DayEditor({ day, isFuture }: { day: CalendarDay; isFuture: boolean }) {
   return (
     <div className="flex flex-col gap-5">
       <Card>
-        <Eyebrow>{full}</Eyebrow>
+        <Eyebrow as="h2">{full}</Eyebrow>
         <p className="mt-1 text-[0.875rem] text-ink-soft">
           {day.scheduled === null
             ? 'Before your plan started'
@@ -303,7 +303,7 @@ function DayEditor({ day, isFuture }: { day: CalendarDay; isFuture: boolean }) {
       <SessionBackfill day={day} />
 
       <Card>
-        <Eyebrow>Habits that day</Eyebrow>
+        <Eyebrow as="h2">Habits that day</Eyebrow>
         <div className="mt-1 divide-y divide-line">
           {tracked.includes('water') && (
             <Stepper
@@ -440,7 +440,7 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
 
   return (
     <Card>
-      <Eyebrow>Sessions</Eyebrow>
+      <Eyebrow as="h2">Sessions</Eyebrow>
 
       {day.sessions.length > 0 ? (
         <ul className="mt-1 divide-y divide-line">
@@ -626,6 +626,16 @@ function LoggedSession({
   removing: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const keepRef = useRef<HTMLButtonElement>(null);
+
+  // Move into the confirmation when it opens, and back to the × when it
+  // closes. Without this, opening it left focus on a button that had just been
+  // disabled and closing it dropped focus to the document — a keyboard user had
+  // to tab the whole page back to where they were.
+  useEffect(() => {
+    if (confirming) keepRef.current?.focus();
+  }, [confirming]);
 
   const name =
     session.type === 'strength' ? 'Strength' : session.type === 'baseline' ? 'Baseline run' : 'Run';
@@ -656,22 +666,35 @@ function LoggedSession({
           </p>
           <p className="text-[0.8125rem] text-ink-faint">{detail}</p>
         </div>
-        {!confirming && (
-          <button
-            onClick={() => setConfirming(true)}
-            aria-label={`Remove this ${name.toLowerCase()} session`}
-            className="tap shrink-0 rounded-lg px-2 text-ink-faint transition-colors hover:text-alert"
-          >
-            ×
-          </button>
-        )}
+        {/* Disabled rather than unmounted: removing the focused element is
+            what dropped focus to the document in the first place. */}
+        <button
+          ref={triggerRef}
+          type="button"
+          disabled={confirming}
+          onClick={() => setConfirming(true)}
+          aria-label={`Remove this ${name.toLowerCase()} session`}
+          aria-expanded={confirming}
+          className="tap shrink-0 rounded-lg px-2 text-ink-faint transition-colors hover:text-alert disabled:opacity-40"
+        >
+          ×
+        </button>
       </div>
 
       {confirming && (
         <div
           className="mt-2.5 rounded-xl border border-alert bg-alert-wash p-3.5"
-          role="alertdialog"
-          aria-label="Confirm removal"
+          // Not `alertdialog`: this is an inline panel, not a modal, and
+          // claiming the role without trapping focus or handling Escape
+          // promises behaviour it does not have. `alert` announces it, which
+          // is the part that was actually wanted.
+          role="alert"
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            setConfirming(false);
+            triggerRef.current?.focus();
+          }}
         >
           <p className="text-[0.9375rem] leading-snug">
             Remove this {name.toLowerCase()} session? It cannot be undone, and it will change what
@@ -679,7 +702,15 @@ function LoggedSession({
           </p>
           <div className="mt-3 flex gap-2.5">
             {/* The safe way out is the wider, first-reached control. */}
-            <Button variant="secondary" full onClick={() => setConfirming(false)}>
+            <Button
+              ref={keepRef}
+              variant="secondary"
+              full
+              onClick={() => {
+                setConfirming(false);
+                triggerRef.current?.focus();
+              }}
+            >
               Keep it
             </Button>
             <Button variant="alert" disabled={removing} onClick={onRemove}>
@@ -705,7 +736,7 @@ function DoseBackfill({ date }: { date: string }) {
 
   return (
     <Card>
-      <Eyebrow>Doses that day</Eyebrow>
+      <Eyebrow as="h2">Doses that day</Eyebrow>
       <ul className="mt-1 divide-y divide-line">
         {data.doses.map((dose) => (
           <li
@@ -766,7 +797,7 @@ function MeasurementBackfill({ day }: { day: CalendarDay }) {
 
   return (
     <Card>
-      <Eyebrow>Measurements</Eyebrow>
+      <Eyebrow as="h2">Measurements</Eyebrow>
       <div className="mt-2 grid grid-cols-3 gap-2.5">
         <Field label="Weight kg">
           <TextInput

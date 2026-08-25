@@ -18,7 +18,10 @@ export function WeeklyCheckIn() {
 
   const last = data?.checks?.[0];
   const daysSince = last
-    ? Math.floor((new Date(`${date}T12:00:00`).getTime() - new Date(`${last.date}T12:00:00`).getTime()) / 86_400_000)
+    ? Math.floor(
+        (new Date(`${date}T12:00:00`).getTime() - new Date(`${last.date}T12:00:00`).getTime()) /
+          86_400_000,
+      )
     : Infinity;
 
   // Nothing until the history has loaded — a prompt that appears and then
@@ -29,9 +32,11 @@ export function WeeklyCheckIn() {
   if (!open) {
     return (
       <Card>
-        <Eyebrow>Weekly check-in</Eyebrow>
+        <Eyebrow as="h2">Weekly check-in</Eyebrow>
         <p className="mt-1.5 leading-snug">
-          {last ? 'A week since your last measurements.' : 'Take your first measurements to track what changes.'}
+          {last
+            ? 'A week since your last measurements.'
+            : 'Take your first measurements to track what changes.'}
         </p>
         <Button variant="secondary" className="mt-3" onClick={() => setOpen(true)}>
           Take measurements
@@ -42,22 +47,38 @@ export function WeeklyCheckIn() {
 
   return (
     <Card>
-      <Eyebrow>Weekly check-in</Eyebrow>
+      <Eyebrow as="h2">Weekly check-in</Eyebrow>
       <div className="mt-3 flex flex-col gap-3">
         <div className="grid grid-cols-3 gap-2.5">
           <Field label="Weight kg">
-            <TextInput type="number" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} />
+            <TextInput
+              type="number"
+              inputMode="decimal"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+            />
           </Field>
           <Field label="Waist cm">
-            <TextInput type="number" inputMode="decimal" value={waist} onChange={(e) => setWaist(e.target.value)} />
+            <TextInput
+              type="number"
+              inputMode="decimal"
+              value={waist}
+              onChange={(e) => setWaist(e.target.value)}
+            />
           </Field>
           <Field label="Rest HR">
-            <TextInput type="number" inputMode="numeric" value={hr} onChange={(e) => setHr(e.target.value)} />
+            <TextInput
+              type="number"
+              inputMode="numeric"
+              value={hr}
+              onChange={(e) => setHr(e.target.value)}
+            />
           </Field>
         </div>
         <Note>
-          Waist and resting heart rate move first. Weight holding steady while your waist comes down is exactly
-          what building muscle while losing fat looks like — it is the outcome to want, not a stall.
+          Waist and resting heart rate move first. Weight holding steady while your waist comes down
+          is exactly what building muscle while losing fat looks like — it is the outcome to want,
+          not a stall.
         </Note>
         <div className="flex gap-2.5">
           <Button

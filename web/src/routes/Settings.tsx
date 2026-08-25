@@ -66,7 +66,7 @@ export function SettingsView() {
       </header>
 
       <Card>
-        <Eyebrow>During a session</Eyebrow>
+        <Eyebrow as="h2">During a session</Eyebrow>
         <label className="flex items-center justify-between gap-4 border-b border-line py-3">
           <span>Sound cues</span>
           <input
@@ -129,7 +129,7 @@ export function SettingsView() {
       </Card>
 
       <Card>
-        <Eyebrow>What you track</Eyebrow>
+        <Eyebrow as="h2">What you track</Eyebrow>
         <p className="mt-1.5 text-[0.875rem] leading-snug text-ink-soft">
           Turn off anything you do not want to see. Tracking nothing but sessions is a perfectly
           good way to use this.
@@ -198,7 +198,7 @@ export function SettingsView() {
 
       {(profile?.smokingStatus === 'current' || profile?.smokingStatus === 'quitting') && (
         <Card>
-          <Eyebrow>Quit support</Eyebrow>
+          <Eyebrow as="h2">Quit support</Eyebrow>
           <p className="mt-1.5 text-[0.875rem] leading-snug text-ink-soft">
             Tell GoodForm what a normal day looked like before, and Today will show what you have
             not smoked and what that is worth.
@@ -241,7 +241,7 @@ export function SettingsView() {
       <TrainingDaysCard settings={settings} onSave={(next) => save.mutate(next)} />
 
       <Card>
-        <Eyebrow>Around a session</Eyebrow>
+        <Eyebrow as="h2">Around a session</Eyebrow>
         <div className="mt-2">
           <Field
             label="When you usually train"
@@ -273,7 +273,7 @@ export function SettingsView() {
       {settings.targetsWithdrawnAt && <RestoreTargetsCard />}
 
       <Card>
-        <Eyebrow>Your profile</Eyebrow>
+        <Eyebrow as="h2">Your profile</Eyebrow>
         <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
           Changing your weight recalculates protein. Changing your equipment reselects your strength
           work.
@@ -390,7 +390,7 @@ function RemindersCard({ settings }: { settings: Settings }) {
 
   return (
     <Card>
-      <Eyebrow>Reminders</Eyebrow>
+      <Eyebrow as="h2">Reminders</Eyebrow>
       <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
         Everything due already shows on Today, with no permission needed. Notifications add a nudge
         at the time itself — useful, and never something the app relies on.
@@ -617,7 +617,9 @@ function RestoreTargetsCard() {
 
   return (
     <Card className="border-walk">
-      <Eyebrow className="!text-walk-deep">Your targets</Eyebrow>
+      <Eyebrow as="h2" className="!text-walk-deep">
+        Your targets
+      </Eyebrow>
       <p className="mt-1.5 leading-relaxed text-ink-soft">
         GoodForm put your protein target and weight figures away because of the pattern in the last
         few weeks. You can have them back — it is your call, and asking twice would just be an app
@@ -675,7 +677,7 @@ function ResetDataCard({ email }: { email: string }) {
 
   return (
     <Card>
-      <Eyebrow>Start over</Eyebrow>
+      <Eyebrow as="h2">Start over</Eyebrow>
       <p className="mt-1.5 leading-relaxed">
         Clears your plan, every logged session, your habit and food logs, measurements and dose
         history — then puts you back at the start so you can build a fresh plan.
@@ -736,7 +738,9 @@ function DeleteAccountCard({ email }: { email: string }) {
 
   return (
     <Card className="border-alert bg-alert-wash">
-      <Eyebrow className="!text-alert">Delete everything</Eyebrow>
+      <Eyebrow as="h2" className="!text-alert">
+        Delete everything
+      </Eyebrow>
       <p className="mt-1.5 leading-relaxed">
         This removes your profile, plans, every session, every log, your list and the foods you
         added. It happens immediately and cannot be undone. Download your data first if you want to
@@ -850,7 +854,7 @@ function TrainingDaysCard({
 
   return (
     <Card>
-      <Eyebrow>Your training days</Eyebrow>
+      <Eyebrow as="h2">Your training days</Eyebrow>
       <p className="mt-1.5 leading-relaxed text-ink-soft">
         Three runs a week, on the days that fit your life. Strength work is optional and never
         shares a day with a run.

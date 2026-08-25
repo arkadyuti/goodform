@@ -102,7 +102,7 @@ export function Reassess() {
 
       {needsBaseline ? (
         <Card>
-          <Eyebrow>A fresh starting point</Eyebrow>
+          <Eyebrow as="h2">A fresh starting point</Eyebrow>
           <p className="mt-1.5 leading-snug text-ink-soft">
             {daysSinceLastRun && daysSinceLastRun >= 56
               ? `It has been about ${Math.round(daysSinceLastRun / 7)} weeks since your last run. Carrying the old block forward would build a plan for someone who no longer exists.`

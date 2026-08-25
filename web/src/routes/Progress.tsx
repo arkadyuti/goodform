@@ -49,7 +49,7 @@ export function Progress() {
       <WeeklyReviewCard />
 
       <Card>
-        <Eyebrow>Longest run interval</Eyebrow>
+        <Eyebrow as="h2">Longest run interval</Eyebrow>
         <p className="mt-1 flex items-baseline gap-2">
           <span className="tabular text-5xl leading-none" style={{ fontWeight: 800 }}>
             {formatMinutes(longestRunSec).replace(' min', '')}
@@ -59,7 +59,7 @@ export function Progress() {
       </Card>
 
       <Card>
-        <Eyebrow>Sessions</Eyebrow>
+        <Eyebrow as="h2">Sessions</Eyebrow>
         <div className="mt-2 grid grid-cols-2 gap-4">
           <div>
             <p className="tabular text-3xl leading-none" style={{ fontWeight: 800 }}>
@@ -152,7 +152,7 @@ export function Progress() {
 
       {logs.length > 0 && (
         <Card>
-          <Eyebrow>Last 4 weeks</Eyebrow>
+          <Eyebrow as="h2">Last 4 weeks</Eyebrow>
           <div className="mt-2 grid grid-cols-3 gap-4">
             <div>
               <p className="tabular text-3xl leading-none" style={{ fontWeight: 800 }}>
@@ -183,7 +183,7 @@ export function Progress() {
 
       {regimenItems.length > 0 && (
         <Card>
-          <Eyebrow>Doses, last four weeks</Eyebrow>
+          <Eyebrow as="h2">Doses, last four weeks</Eyebrow>
           <ul className="mt-2.5 flex flex-col gap-3.5">
             {regimenItems.map((row) => (
               <li key={row.item.id}>
@@ -375,7 +375,7 @@ const DATASETS = [
 export function ExportCard() {
   return (
     <Card>
-      <Eyebrow>Take your data</Eyebrow>
+      <Eyebrow as="h2">Take your data</Eyebrow>
       <p className="mt-1.5 text-[0.9375rem] leading-snug text-ink-soft">
         Everything here is yours. The JSON file is the complete record; the CSVs open in any
         spreadsheet.

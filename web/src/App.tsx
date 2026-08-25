@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { useSession } from './lib/auth.ts';
@@ -61,6 +61,18 @@ export function App() {
     void queryClient.invalidateQueries();
   }, [userId, queryClient]);
 
+  // Move focus to the new screen on navigation. Skipped on first paint, where
+  // stealing focus from the top of the document would be its own annoyance.
+  const mainRef = useRef<HTMLElement>(null);
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    mainRef.current?.focus();
+  }, [location.pathname]);
+
   if (isPending) return <Loading />;
   if (!session?.user) return <Login />;
   if (profileLoading) return <Loading />;
@@ -75,9 +87,28 @@ export function App() {
 
   return (
     <div className="min-h-dvh">
+      {/*
+        Seven nav links sit above every screen, so without this a keyboard or
+        switch user tabs through all of them on every navigation before
+        reaching anything. Visible only when focused, which is the point.
+      */}
+      {!immersive && (
+        <a
+          href="#main"
+          className="sr-only rounded-xl bg-ink px-4 py-2 text-chalk focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50"
+        >
+          Skip to content
+        </a>
+      )}
       {!immersive && <Nav />}
       <main
-        className={immersive ? '' : 'mx-auto w-full max-w-2xl px-4 pt-4 pb-16'}
+        id="main"
+        ref={mainRef}
+        // Focused on every navigation, so a screen reader announces the new
+        // screen instead of leaving focus on the link that was just clicked and
+        // saying nothing at all. -1 keeps it out of the tab order otherwise.
+        tabIndex={-1}
+        className={`outline-none ${immersive ? '' : 'mx-auto w-full max-w-2xl px-4 pt-4 pb-16'}`}
         // The bottom padding clears the iPhone home indicator today by
         // coincidence; the inset makes it deliberate. Immersive screens set
         // their own, because they paint to the edges on purpose.

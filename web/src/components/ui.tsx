@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { toggleChoice } from '../lib/choices.ts';
 
 type Variant = 'primary' | 'secondary' | 'quiet' | 'alert';
@@ -20,7 +20,13 @@ export function Button({
   // several of these sit inside one. Any caller that wants to submit says so.
   type = 'button',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; full?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: Variant;
+  full?: boolean;
+  // React 19 passes `ref` as an ordinary prop, so callers that need to move
+  // focus to a button can just ask for it.
+  ref?: Ref<HTMLButtonElement>;
+}) {
   return (
     <button
       type={type}
@@ -42,8 +48,25 @@ export function Card({
   return <Tag className={`card p-4 ${className}`}>{children}</Tag>;
 }
 
-export function Eyebrow({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <p className={`eyebrow ${className}`}>{children}</p>;
+/**
+ * The small capitalised label above a section.
+ *
+ * Rendered as a paragraph by default, because plenty of these name a control
+ * rather than a section. Where one genuinely titles a card, pass `as="h2"`:
+ * the app had nineteen `<h1>`s and no other heading level at all, so heading
+ * navigation landed on the page title and then found nothing on screens with
+ * eight sections.
+ */
+export function Eyebrow({
+  children,
+  className = '',
+  as: Tag = 'p',
+}: {
+  children: ReactNode;
+  className?: string;
+  as?: 'p' | 'h2' | 'h3';
+}) {
+  return <Tag className={`eyebrow ${className}`}>{children}</Tag>;
 }
 
 /** One-tap counters for the daily habits. No keyboards, no dialogs. */
@@ -199,15 +222,59 @@ export function Choices<T extends string>({
     if (!multiple) return onChange([option]);
     onChange(toggleChoice(selected, option, exclusive));
   };
+  /**
+   * Single-select is a radio group, not a row of independent toggles.
+   *
+   * All of onboarding is built from this. As toggle buttons it announced each
+   * option on its own, with no "3 of 5" position and no arrow keys — so a
+   * six-option question was six tab stops and no sense of being one choice.
+   * `aria-pressed` stays for multi-select, where it is the right thing.
+   */
+  const single = !multiple;
+
+  const move = (from: number, delta: number) => {
+    const next = (from + delta + options.length) % options.length;
+    const target = options[next];
+    if (target) toggle(target.value);
+  };
+
   return (
-    <div className={`grid gap-2 ${columns === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-      {options.map((option) => {
+    <div
+      className={`grid gap-2 ${columns === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}
+      role={single ? 'radiogroup' : undefined}
+    >
+      {options.map((option, index) => {
         const active = selected.includes(option.value);
         return (
           <button
             key={option.value}
             type="button"
-            aria-pressed={active}
+            role={single ? 'radio' : undefined}
+            aria-checked={single ? active : undefined}
+            aria-pressed={single ? undefined : active}
+            // Arrow keys move between radios, and only the selected one is a
+            // tab stop — the behaviour a native radio group has for free.
+            tabIndex={single ? (active || selected.length === 0 ? 0 : -1) : undefined}
+            onKeyDown={
+              single
+                ? (event) => {
+                    const step =
+                      event.key === 'ArrowDown' || event.key === 'ArrowRight'
+                        ? 1
+                        : event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+                          ? -1
+                          : 0;
+                    if (!step) return;
+                    event.preventDefault();
+                    move(index, step);
+                    const group = event.currentTarget.parentElement;
+                    const next = group?.children[
+                      (index + step + options.length) % options.length
+                    ] as HTMLElement | undefined;
+                    next?.focus();
+                  }
+                : undefined
+            }
             onClick={() => toggle(option.value)}
             className={`tap rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
               active
@@ -275,7 +342,7 @@ export function LoadFailed({
 }) {
   return (
     <Card>
-      <Eyebrow>Could not load {what}</Eyebrow>
+      <Eyebrow as="h2">Could not load {what}</Eyebrow>
       <p className="mt-2 leading-snug">
         Nothing is lost — this is a problem reaching the server, not a problem with your data.
       </p>

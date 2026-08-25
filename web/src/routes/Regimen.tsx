@@ -85,7 +85,7 @@ export function Regimen() {
 
       {!isPending && !isError && live.length === 0 && (
         <Card>
-          <Eyebrow>Nothing here yet</Eyebrow>
+          <Eyebrow as="h2">Nothing here yet</Eyebrow>
           <p className="mt-2 leading-snug">
             Add a tablet, a scoop or a course, and it will appear on Today grouped by when you take
             it.
@@ -513,7 +513,7 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
       </Card>
 
       <Card>
-        <Eyebrow>When</Eyebrow>
+        <Eyebrow as="h2">When</Eyebrow>
         <div className="mt-2.5 flex flex-col gap-3.5">
           <Choices
             value={[scheduleKind]}
@@ -718,7 +718,7 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
 
       {absorption.length > 0 && (
         <Card>
-          <Eyebrow>Worth knowing</Eyebrow>
+          <Eyebrow as="h2">Worth knowing</Eyebrow>
           <ul className="mt-2 flex flex-col gap-2">
             {absorption.map((note) => (
               <li

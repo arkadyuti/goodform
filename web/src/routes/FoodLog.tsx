@@ -31,7 +31,9 @@ export function FoodLog() {
   return (
     <div className="flex flex-col gap-5 pt-1">
       <header>
-        <Eyebrow>{targetsWithdrawn ? 'Food today' : 'Protein today'}</Eyebrow>
+        {/* This screen had no <h1> at all, so it was the one place a screen
+            reader could not tell you where you were. */}
+        <h1 className="eyebrow">{targetsWithdrawn ? 'Food today' : 'Protein today'}</h1>
         {targetsWithdrawn ? (
           <p className="mt-2 text-[1.0625rem] leading-snug">
             Keep logging what you eat. Nothing is being counted against a target at the moment.
@@ -49,7 +51,10 @@ export function FoodLog() {
             <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-chalk-deep">
               <div
                 className="h-full rounded-full bg-run"
-                style={{ width: `${Math.min(100, (total / target.targetG) * 100)}%`, transition: 'width 300ms ease' }}
+                style={{
+                  width: `${Math.min(100, (total / target.targetG) * 100)}%`,
+                  transition: 'width 300ms ease',
+                }}
               />
             </div>
             <p className="mt-2 text-[0.875rem] text-ink-soft">
@@ -63,7 +68,7 @@ export function FoodLog() {
 
       {nutrition && nutrition.entries.length > 0 && (
         <Card>
-          <Eyebrow>Logged</Eyebrow>
+          <Eyebrow as="h2">Logged</Eyebrow>
           <ul className="mt-1 divide-y divide-line">
             {nutrition.entries.map((entry) => (
               <li key={entry.id} className="flex items-center justify-between gap-3 py-2.5">
@@ -76,7 +81,9 @@ export function FoodLog() {
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   {!targetsWithdrawn && (
-                    <span className="tabular font-semibold">{Math.round(entry.proteinG * entry.servings)}g</span>
+                    <span className="tabular font-semibold">
+                      {Math.round(entry.proteinG * entry.servings)}g
+                    </span>
                   )}
                   <button
                     onClick={() => removeEntry.mutate(entry.id)}
@@ -102,7 +109,9 @@ export function FoodLog() {
           onChange={(e) => setQuery(e.target.value)}
         />
         {!query && !targetsWithdrawn && (
-          <p className="mt-2 text-[0.8125rem] text-ink-faint">Highest protein first. Search for anything else.</p>
+          <p className="mt-2 text-[0.8125rem] text-ink-faint">
+            Highest protein first. Search for anything else.
+          </p>
         )}
         <ul className="mt-2.5 flex flex-col gap-1.5">
           {(query
@@ -119,7 +128,9 @@ export function FoodLog() {
                   <span className="block truncate">{food.name}</span>
                   <span className="block text-[0.8125rem] text-ink-faint">{food.servingLabel}</span>
                 </span>
-                {!targetsWithdrawn && <span className="tabular shrink-0 font-semibold">{food.proteinG}g</span>}
+                {!targetsWithdrawn && (
+                  <span className="tabular shrink-0 font-semibold">{food.proteinG}g</span>
+                )}
               </button>
             </li>
           ))}
@@ -141,7 +152,7 @@ export function FoodLog() {
 
       {notes.length > 0 && (
         <Card>
-          <Eyebrow>For how you eat</Eyebrow>
+          <Eyebrow as="h2">For how you eat</Eyebrow>
           <ul className="mt-2 flex flex-col gap-2">
             {notes.map((note) => (
               <li key={note} className="flex gap-2.5 text-[0.9375rem] leading-snug text-ink-soft">
@@ -172,11 +183,19 @@ function CustomFood({ onDone }: { onDone: () => void }) {
     <Card className="mt-3">
       <div className="flex flex-col gap-3">
         <Field label="Name">
-          <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Ragi porridge" />
+          <TextInput
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ragi porridge"
+          />
         </Field>
         <div className="grid grid-cols-2 gap-2.5">
           <Field label="Serving">
-            <TextInput value={serving} onChange={(e) => setServing(e.target.value)} placeholder="1 bowl" />
+            <TextInput
+              value={serving}
+              onChange={(e) => setServing(e.target.value)}
+              placeholder="1 bowl"
+            />
           </Field>
           <Field label="Protein g">
             <TextInput
