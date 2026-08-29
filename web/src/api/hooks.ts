@@ -674,7 +674,9 @@ export function useDeleteAccount() {
 // Supplements and medicines (P3.1)
 // ---------------------------------------------------------------------------
 
-export type RegimenItemInput = Omit<RegimenItem, 'id' | 'archivedAt'>;
+/** What a caller supplies when creating or editing an item — the server owns
+ *  the identity and the archive state. */
+export type RegimenItemInput = Omit<RegimenItem, 'id' | 'archivedAt' | 'archivedOn'>;
 
 export function useRegimenItems(includeArchived = false) {
   return useQuery({

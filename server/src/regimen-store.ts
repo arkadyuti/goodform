@@ -1,11 +1,12 @@
 import { and, eq, gte, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import type { DoseEvent, RegimenItem } from '@goodform/shared';
 import { db, schema } from './db/index.js';
+import { localParts } from './time.js';
 
 type ItemRow = typeof schema.regimenItems.$inferSelect;
 type EventRow = typeof schema.regimenEvents.$inferSelect;
 
-export function toItem(row: ItemRow): RegimenItem {
+export function toItem(row: ItemRow, timezone = 'UTC'): RegimenItem {
   return {
     id: row.id,
     name: row.name,
@@ -24,6 +25,9 @@ export function toItem(row: ItemRow): RegimenItem {
     remindersEnabled: row.remindersEnabled,
     notes: row.notes,
     archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
+    // Resolved through the runner's zone, so "the day I stopped it" means the
+    // day they experienced, not the one UTC happened to be on.
+    archivedOn: row.archivedAt ? localParts(row.archivedAt, timezone).date : null,
   };
 }
 
@@ -39,22 +43,38 @@ export function toEvent(row: EventRow): DoseEvent {
 }
 
 /** Live items only — archived ones are kept for history, never for scheduling. */
+/** The runner's zone, for turning stored instants into their calendar days. */
+async function timezoneOf(userId: string): Promise<string> {
+  const [row] = await db
+    .select({ timezone: schema.settings.timezone })
+    .from(schema.settings)
+    .where(eq(schema.settings.userId, userId));
+  return row?.timezone ?? 'UTC';
+}
+
 export async function loadActiveItems(userId: string): Promise<RegimenItem[]> {
-  const rows = await db
-    .select()
-    .from(schema.regimenItems)
-    .where(and(eq(schema.regimenItems.userId, userId), isNull(schema.regimenItems.archivedAt)))
-    .orderBy(schema.regimenItems.name);
-  return rows.map(toItem);
+  const [rows, timezone] = await Promise.all([
+    db
+      .select()
+      .from(schema.regimenItems)
+      .where(and(eq(schema.regimenItems.userId, userId), isNull(schema.regimenItems.archivedAt)))
+      .orderBy(schema.regimenItems.name),
+    timezoneOf(userId),
+  ]);
+  // Not `rows.map(toItem)` — that hands the array index in as the timezone.
+  return rows.map((row) => toItem(row, timezone));
 }
 
 export async function loadAllItems(userId: string): Promise<RegimenItem[]> {
-  const rows = await db
-    .select()
-    .from(schema.regimenItems)
-    .where(eq(schema.regimenItems.userId, userId))
-    .orderBy(schema.regimenItems.name);
-  return rows.map(toItem);
+  const [rows, timezone] = await Promise.all([
+    db
+      .select()
+      .from(schema.regimenItems)
+      .where(eq(schema.regimenItems.userId, userId))
+      .orderBy(schema.regimenItems.name),
+    timezoneOf(userId),
+  ]);
+  return rows.map((row) => toItem(row, timezone));
 }
 
 export async function loadEvents(userId: string, from: string, to: string): Promise<DoseEvent[]> {

@@ -385,6 +385,7 @@ function ItemForm({ item, onDone }: { item: RegimenItem | null; onDone: () => vo
       remindersEnabled,
       notes: notes || null,
       archivedAt: null,
+      archivedOn: null,
     }),
     [
       name,

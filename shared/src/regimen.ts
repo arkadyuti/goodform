@@ -56,6 +56,14 @@ export interface RegimenItem {
   remindersEnabled: boolean;
   notes: string | null;
   archivedAt: string | null;
+  /**
+   * The calendar day the item was stopped, in the runner's own zone.
+   *
+   * `archivedAt` is an instant. Slicing its UTC date and comparing that against
+   * local calendar days drops a day for anyone east of Greenwich who stops an
+   * item after midnight — a day they had already lived and already ticked.
+   */
+  archivedOn: string | null;
 }
 
 export interface DoseEvent {
@@ -124,7 +132,8 @@ export function isDueOn(item: RegimenItem, date: string): boolean {
   // erased its whole adherence history — last week's finished review went from
   // "9 of 14 ticked" to nothing, and past calendar days read "2 taken out of 0
   // due". The route's own comment promises the opposite.
-  if (item.archivedAt && date >= item.archivedAt.slice(0, 10)) return false;
+  const stoppedOn = item.archivedOn ?? item.archivedAt?.slice(0, 10) ?? null;
+  if (stoppedOn && date >= stoppedOn) return false;
   // As-needed items are logged when taken; they are never overdue.
   if (item.scheduleKind === 'as_needed') return false;
   if (date < item.anchorDate) return false;

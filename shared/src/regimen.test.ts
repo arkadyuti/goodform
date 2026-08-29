@@ -35,6 +35,7 @@ function item(over: Partial<RegimenItem> = {}): RegimenItem {
     remindersEnabled: true,
     notes: null,
     archivedAt: null,
+    archivedOn: null,
     ...over,
   };
 }
