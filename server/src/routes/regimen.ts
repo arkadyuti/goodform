@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   DOSE_FORMS,
@@ -305,6 +305,47 @@ export const regimenRoutes = new Hono<AppEnv>()
     await db.delete(schema.regimenEvents).where(eq(schema.regimenEvents.id, row.id));
     // The dose is outstanding again, so the reminder about it should be too.
     await unresolveReminder(userId, 'regimen', `${row.itemId}:${row.dueDate}:${row.dueTime ?? ''}`);
+    return c.json({ ok: true });
+  })
+
+  /**
+   * Undo by occurrence rather than by event id.
+   *
+   * The screens that log a dose know which item and which slot; they do not
+   * hold the event's id. Without this the only "undo" available on Today was a
+   * hidden toggle that flipped a taken dose to *skipped* — recording a missed
+   * dose out of a mis-tap.
+   */
+  .post('/events/undo', async (c) => {
+    const userId = c.get('userId');
+    const parsed = z
+      .object({
+        itemId: z.string().uuid(),
+        dueDate: z.string().regex(DATE),
+        dueTime: z.string().refine(isTimeString, 'Expected HH:MM').nullish(),
+      })
+      .safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: 'Invalid undo' }, 400);
+    const { itemId, dueDate, dueTime } = parsed.data;
+
+    const [row] = await db
+      .select()
+      .from(schema.regimenEvents)
+      .where(
+        and(
+          eq(schema.regimenEvents.userId, userId),
+          eq(schema.regimenEvents.itemId, itemId),
+          eq(schema.regimenEvents.dueDate, dueDate),
+          dueTime
+            ? eq(schema.regimenEvents.dueTime, dueTime)
+            : isNull(schema.regimenEvents.dueTime),
+        ),
+      );
+    if (!row) return c.json({ ok: true });
+
+    if (row.status === 'taken') await adjustSupply(userId, row.itemId, 1);
+    await db.delete(schema.regimenEvents).where(eq(schema.regimenEvents.id, row.id));
+    await unresolveReminder(userId, 'regimen', `${itemId}:${dueDate}:${dueTime ?? ''}`);
     return c.json({ ok: true });
   })
 

@@ -392,7 +392,15 @@ describe('generatePlan continuing from a finished block', () => {
 });
 
 describe('a session declined on purpose', () => {
-  const week = { index: 3, runSec: 120, walkSec: 90, reps: 4, sessionsPerWeek: 3, isDeload: false, totalRunSec: 1440 };
+  const week = {
+    index: 3,
+    runSec: 120,
+    walkSec: 90,
+    reps: 4,
+    sessionsPerWeek: 3,
+    isDeload: false,
+    totalRunSec: 1440,
+  };
   const run = (completion: 'full' | 'partial' | 'skipped'): WorkoutSession => ({
     id: `s-${completion}-${Math.round(week.runSec)}`,
     date: '2026-08-24',
@@ -409,12 +417,18 @@ describe('a session declined on purpose', () => {
 
   it('reaches the same decision as silence', () => {
     // The plan still reshapes — saying no does not earn a free pass.
-    const declined = evaluateWeek(week, [{ ...run('skipped'), id: 'a' }, { ...run('skipped'), id: 'b' }]);
+    const declined = evaluateWeek(week, [
+      { ...run('skipped'), id: 'a' },
+      { ...run('skipped'), id: 'b' },
+    ]);
     expect(declined.decision).toBe('step_back');
   });
 
   it('but is not described as something missed', () => {
-    const declined = evaluateWeek(week, [{ ...run('skipped'), id: 'a' }, { ...run('skipped'), id: 'b' }]);
+    const declined = evaluateWeek(week, [
+      { ...run('skipped'), id: 'a' },
+      { ...run('skipped'), id: 'b' },
+    ]);
     expect(declined.reason).toContain('called off');
     expect(declined.reason).not.toContain('missed');
 
@@ -423,7 +437,11 @@ describe('a session declined on purpose', () => {
   });
 
   it('does not count as attempted', () => {
-    const one = evaluateWeek(week, [{ ...run('full'), id: 'a' }, { ...run('full'), id: 'b' }, { ...run('skipped'), id: 'c' }]);
+    const one = evaluateWeek(week, [
+      { ...run('full'), id: 'a' },
+      { ...run('full'), id: 'b' },
+      { ...run('skipped'), id: 'c' },
+    ]);
     expect(one.decision).toBe('offer_repeat');
   });
 });
@@ -491,5 +509,55 @@ describe('a week that is consistently out of reach', () => {
     const tiny = { ...week, reps: 2 };
     const barely = evaluateWeek(tiny, [run(0, 'a'), run(1, 'b'), run(1, 'c')], 3);
     if (barely.decision === 'ease') expect(barely.easeTo!.reps).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('a week that is still going', () => {
+  const week = {
+    index: 1,
+    runSec: 60,
+    walkSec: 90,
+    reps: 8,
+    sessionsPerWeek: 3,
+    isDeload: false,
+    totalRunSec: 1440,
+  };
+  const done: WorkoutSession = {
+    id: 'a',
+    date: '2026-08-30',
+    type: 'run',
+    planWeek: 1,
+    prescription: { runSec: 60, walkSec: 90, reps: 8 },
+    completion: 'full',
+    effort: null,
+    discomfort: null,
+    intervalsCompleted: 8,
+    durationSec: null,
+    notes: null,
+  };
+
+  it('does not accuse a new runner of missing sessions on day one', () => {
+    // One of three done, six days left. The verdict used to be "two or more
+    // sessions were missed" on the same card that said "1 of 3 runs done".
+    const midWeek = evaluateWeek(week, [done], 0, false);
+    expect(midWeek.reason).not.toContain('missed');
+    expect(midWeek.overridable).toBe(false);
+  });
+
+  it('still speaks immediately about discomfort, which has already happened', () => {
+    const hurt = {
+      ...done,
+      id: 'b',
+      discomfort: { location: 'shin' as const, severity: 4 as const },
+    };
+    const midWeek = evaluateWeek(week, [hurt], 0, false);
+    expect(midWeek.decision).toBe('pause_medical');
+  });
+
+  it('gives the attendance verdict once the week is over', () => {
+    // One of three, so two are genuinely unaccounted for by the end.
+    const over = evaluateWeek(week, [done], 0, true);
+    expect(over.decision).toBe('step_back');
+    expect(over.reason).toContain('missed');
   });
 });

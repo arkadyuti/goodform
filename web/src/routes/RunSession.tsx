@@ -505,7 +505,9 @@ function Intervals({
                   : 'bg-ink/12 text-ink hover:bg-ink/20'
               }`}
             >
-              −30s
+              {/* The glyph used to be "−30s", which reads as taking time off —
+                  next to Skip, which advances. It gives you 30 seconds back. */}
+              +30s
             </button>
             <button
               type="button"

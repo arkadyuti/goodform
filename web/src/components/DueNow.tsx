@@ -11,7 +11,7 @@ import {
   type DoseState,
   type RegimenItem,
 } from '@goodform/shared';
-import { useLogDose, useRegimenDue } from '../api/hooks.ts';
+import { useLogDose, useRegimenDue, useUndoDose } from '../api/hooks.ts';
 import { nowTime, today } from '../lib/date.ts';
 import { Button, Card, Eyebrow } from './ui.tsx';
 
@@ -26,6 +26,7 @@ export function DueNow() {
   const [clock, setClock] = useState(nowTime);
   const { data, isPending } = useRegimenDue(date, clock);
   const log = useLogDose(date);
+  const undo = useUndoDose(date);
 
   // The overdue marks are a function of the clock, so the clock has to move.
   useEffect(() => {
@@ -46,7 +47,8 @@ export function DueNow() {
   const done = doses.length - outstanding.length;
   const refills = data.items.filter(needsRefill);
 
-  if (doses.length === 0 && data.asNeeded.length === 0 && data.finishedCourses.length === 0) return null;
+  if (doses.length === 0 && data.asNeeded.length === 0 && data.finishedCourses.length === 0)
+    return null;
 
   const groups = groupByBand(doses);
 
@@ -71,13 +73,18 @@ export function DueNow() {
 
       {groups.map((group) => (
         <div key={group.band} className="mt-3">
-          <p className="text-[0.75rem] tracking-wide text-ink-faint uppercase">{bandLabel(group.band)}</p>
+          <p className="text-[0.75rem] tracking-wide text-ink-faint uppercase">
+            {bandLabel(group.band)}
+          </p>
           <ul className="mt-1 divide-y divide-line">
             {group.doses.map((dose) => (
               <DoseRow
                 key={`${dose.item.id}-${dose.dueTime}`}
                 dose={dose}
-                onLog={(status) => log.mutate({ itemId: dose.item.id, dueTime: dose.dueTime, status })}
+                onLog={(status) =>
+                  log.mutate({ itemId: dose.item.id, dueTime: dose.dueTime, status })
+                }
+                onUndo={() => undo.mutate({ itemId: dose.item.id, dueTime: dose.dueTime })}
               />
             ))}
           </ul>
@@ -103,39 +110,55 @@ export function DueNow() {
       )}
 
       {data.finishedCourses.map((item) => (
-        <p key={item.id} className="mt-3 rounded-xl bg-chalk-deep px-3.5 py-3 text-[0.875rem] leading-relaxed text-ink-soft">
-          <strong className="text-ink">{item.name}</strong> has finished its course. It has stopped appearing on
-          its own — nothing to turn off.
+        <p
+          key={item.id}
+          className="mt-3 rounded-xl bg-chalk-deep px-3.5 py-3 text-[0.875rem] leading-relaxed text-ink-soft"
+        >
+          <strong className="text-ink">{item.name}</strong> has finished its course. It has stopped
+          appearing on its own — nothing to turn off.
         </p>
       ))}
 
       {refills.length > 0 && (
         <p className="mt-3 rounded-xl bg-walk-wash px-3.5 py-3 text-[0.875rem] leading-relaxed text-walk-deep">
-          Running low on {refills.map((item) => item.name).join(', ')}. Worth reordering before it runs out.
+          Running low on {refills.map((item) => item.name).join(', ')}. Worth reordering before it
+          runs out.
         </p>
       )}
 
       <p className="mt-3 text-[0.75rem] leading-relaxed text-ink-faint">
-        Notifications are best-effort on every phone. A dose showing here has not been missed — it just has not
-        been ticked.
+        Notifications are best-effort on every phone. A dose showing here has not been missed — it
+        just has not been ticked.
       </p>
     </Card>
   );
 }
 
-function DoseRow({ dose, onLog }: { dose: DoseState; onLog: (status: 'taken' | 'skipped') => void }) {
+function DoseRow({
+  dose,
+  onLog,
+  onUndo,
+}: {
+  dose: DoseState;
+  onLog: (status: 'taken' | 'skipped') => void;
+  onUndo: () => void;
+}) {
   const [showNotes, setShowNotes] = useState(false);
   const notes = absorptionNotes(dose.item);
   const item: RegimenItem = dose.item;
   const courseLeft = courseDaysRemaining(item, dose.dueDate);
 
-  const detail = [doseLabel(item), FOOD_RULE_LABELS[item.foodRule], dose.dueTime].filter(Boolean).join(' · ');
+  const detail = [doseLabel(item), FOOD_RULE_LABELS[item.foodRule], dose.dueTime]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <li className="py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className={`truncate text-[0.9375rem] ${dose.status === 'skipped' ? 'text-ink-faint line-through' : ''}`}>
+          <p
+            className={`truncate text-[0.9375rem] ${dose.status === 'skipped' ? 'text-ink-faint line-through' : ''}`}
+          >
             {item.name}
             {item.kind === 'medicine' && (
               <span className="ml-1.5 rounded bg-chalk-deep px-1.5 py-0.5 text-[0.6875rem] tracking-wide text-ink-soft uppercase">
@@ -146,7 +169,9 @@ function DoseRow({ dose, onLog }: { dose: DoseState; onLog: (status: 'taken' | '
           <p className={`text-[0.8125rem] ${dose.overdue ? 'text-walk-deep' : 'text-ink-faint'}`}>
             {detail}
             {dose.overdue && ' · still to tick'}
-            {courseLeft !== null && courseLeft > 0 && ` · ${courseLeft} ${courseLeft === 1 ? 'day' : 'days'} left`}
+            {courseLeft !== null &&
+              courseLeft > 0 &&
+              ` · ${courseLeft} ${courseLeft === 1 ? 'day' : 'days'} left`}
           </p>
         </div>
 
@@ -172,14 +197,27 @@ function DoseRow({ dose, onLog }: { dose: DoseState; onLog: (status: 'taken' | '
               </button>
             </>
           ) : (
-            <button
-              onClick={() => onLog(dose.status === 'taken' ? 'skipped' : 'taken')}
-              className={`tap rounded-xl px-3 text-[0.875rem] ${
-                dose.status === 'taken' ? 'text-good' : 'text-ink-faint'
-              }`}
-            >
-              {dose.status === 'taken' ? '✓ taken' : 'skipped'}
-            </button>
+            /*
+             * An unlabelled toggle used to sit here: tapping "✓ taken" flipped
+             * the dose to *skipped*, with no confirmation, no hint that it was
+             * even a button, and no way back to unlogged. On a course of
+             * antibiotics one stray tap recorded a missed dose. What someone
+             * wants after a mis-tap is to undo it, so that is what it does.
+             */
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-[0.875rem] ${dose.status === 'taken' ? 'text-good' : 'text-ink-faint'}`}
+              >
+                {dose.status === 'taken' ? '✓ taken' : 'skipped'}
+              </span>
+              <button
+                onClick={() => onUndo()}
+                aria-label={`Undo — ${item.name} is marked ${dose.status}`}
+                className="tap rounded-xl px-2 text-[0.875rem] text-ink-faint underline underline-offset-4 transition-colors hover:text-ink"
+              >
+                Undo
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -193,7 +231,11 @@ function DoseRow({ dose, onLog }: { dose: DoseState; onLog: (status: 'taken' | '
               {note.text}
             </p>
           ))}
-          <Button variant="quiet" className="mt-1 px-2 !text-run-deep" onClick={() => setShowNotes(false)}>
+          <Button
+            variant="quiet"
+            className="mt-1 px-2 !text-run-deep"
+            onClick={() => setShowNotes(false)}
+          >
             Got it
           </Button>
         </div>

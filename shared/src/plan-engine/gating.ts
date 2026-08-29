@@ -31,6 +31,16 @@ export function evaluateWeek(
   sessions: WorkoutSession[],
   /** How many times this week has already been repeated. */
   repeats = 0,
+  /**
+   * Whether the week is actually over.
+   *
+   * An attendance verdict mid-week is nonsense: on day one of week one, with
+   * one run done of three, `missed` is 2 and the runner was told they had
+   * "missed two or more sessions" — minutes after signing up, on the same card
+   * that said "1 of 3 runs done". Discomfort still speaks immediately, because
+   * that is about what already happened rather than what has not happened yet.
+   */
+  weekOver = true,
 ): GateResult {
   const runs = sessions.filter((s) => s.type === 'run');
   const planned = week.sessionsPerWeek;
@@ -51,9 +61,7 @@ export function evaluateWeek(
   const declined = runs.filter((s) => s.completion === 'skipped').length;
   const deliberate = declined > 0;
 
-  const severities = runs
-    .map((s) => s.discomfort?.severity ?? 0)
-    .filter((n) => n > 0);
+  const severities = runs.map((s) => s.discomfort?.severity ?? 0).filter((n) => n > 0);
   const worst = severities.length ? Math.max(...severities) : 0;
   const moderateCount = severities.filter((n) => n >= 3).length;
 
@@ -74,6 +82,16 @@ export function evaluateWeek(
         'Discomfort at 3 or above showed up twice this week. Repeating the same week with extra strength work lets the tissue catch up.',
       overridable: true,
       strengthEmphasis: true,
+    };
+  }
+
+  // Nothing below this point is fair to say before the week has run its course.
+  if (!weekOver) {
+    return {
+      decision: 'offer_repeat',
+      reason: 'The week is still going. Nothing is decided until it is done.',
+      overridable: false,
+      strengthEmphasis: false,
     };
   }
 
@@ -150,13 +168,18 @@ export interface BreakResult {
 /** PRD FR-3.5. After a gap, the plan steps back in proportion to its length. */
 export function returnFromBreak(gapDays: number): BreakResult {
   if (gapDays < 10) {
-    return { stepBackWeeks: 0, needsReassessment: false, reason: 'Short gap — pick up where you left off.' };
+    return {
+      stepBackWeeks: 0,
+      needsReassessment: false,
+      reason: 'Short gap — pick up where you left off.',
+    };
   }
   if (gapDays >= 56) {
     return {
       stepBackWeeks: 0,
       needsReassessment: true,
-      reason: 'It has been a while. A fresh baseline gives you a plan that fits where your legs are now.',
+      reason:
+        'It has been a while. A fresh baseline gives you a plan that fits where your legs are now.',
     };
   }
   const stepBackWeeks = Math.min(3, Math.floor(gapDays / 14) + 1);

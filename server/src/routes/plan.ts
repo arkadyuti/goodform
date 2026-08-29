@@ -280,12 +280,12 @@ export const planRoutes = new Hono<AppEnv>()
       // How many times this same week has already come round. Without it the
       // gate is stateless and can only ever offer the same repeat again.
       week.repeats,
+      // The gate judges a *whole* week. Asked on a Wednesday it used to report
+      // missed sessions regardless, because the rest of the week has not
+      // happened yet — so it is told outright whether the week is over.
+      todayForGate > to,
     );
 
-    // The gate judges a *whole* week. Asked on a Wednesday it will always
-    // report missed sessions, because the rest of the week has not happened
-    // yet — so the client needs to know whether the week is actually over
-    // before it repeats any of that back to the runner.
     const today = await todayFrom(c);
     return c.json({
       gate,

@@ -761,6 +761,17 @@ export function useRefillRegimenItem() {
  * Ticking a dose is a durable write: a medicine gets taken in a kitchen with
  * no signal as often as anywhere else, and the tick must not evaporate.
  */
+/** Removes a dose log entirely, rather than recording a contradiction. */
+export function useUndoDose(date: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ['regimen', 'undo'],
+    mutationFn: (input: { itemId: string; dueTime: string | null }) =>
+      api.post('/regimen/events/undo', { ...input, dueDate: date }),
+    onSettled: () => invalidateIfOnline(qc, [keys.regimenDue(date), ['regimen'], keys.progress]),
+  });
+}
+
 export function useLogDose(date: string) {
   const qc = useQueryClient();
   return useMutation({
