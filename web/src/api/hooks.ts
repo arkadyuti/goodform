@@ -187,7 +187,13 @@ export function useWeekReview(enabled = true) {
     queryKey: keys.weekReview,
     queryFn: () =>
       api.get<{
-        gate: { decision: string; reason: string; overridable: boolean; strengthEmphasis: boolean };
+        gate: {
+          decision: string;
+          reason: string;
+          overridable: boolean;
+          strengthEmphasis: boolean;
+          easeTo?: { runSec: number; reps: number };
+        };
         week: PlanWeekRow;
         range: { from: string; to: string };
         /** False mid-week, when an attendance verdict would be premature. */
@@ -351,10 +357,11 @@ export function useWeekDecision() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: {
-      action: 'advance' | 'repeat' | 'step_back' | 'pause' | 'resume';
+      action: 'advance' | 'repeat' | 'step_back' | 'pause' | 'resume' | 'ease';
       override?: boolean;
       /** The week the screen was showing, so a repeated tap is ignored. */
       fromWeek?: number;
+      easeTo?: { runSec: number; reps: number };
     }) => api.post('/plan/week-decision', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.plan });

@@ -4,11 +4,40 @@ import type { GateResult, PlanWeek, WorkoutSession } from '../types.js';
  * PRD FR-3.2. Decides what happens after a week of running, from what was
  * actually logged. Repeating is a first-class outcome, never a failure state.
  */
-export function evaluateWeek(week: PlanWeek, sessions: WorkoutSession[]): GateResult {
+/**
+ * How much of a session was actually done, 0–1.
+ *
+ * A session cut short at six of seven intervals is not the same as one cut
+ * short at one, and the gate used to treat them identically — `partial` counted
+ * for exactly nothing. That is how a runner doing most of the work every time
+ * got told, week after week, that not every session finished as planned.
+ */
+function fractionDone(session: WorkoutSession): number {
+  if (session.completion === 'full') return 1;
+  if (session.completion === 'skipped') return 0;
+  const reps = session.prescription?.reps ?? 0;
+  if (!reps || session.intervalsCompleted === null) return 0;
+  return Math.min(1, session.intervalsCompleted / reps);
+}
+
+/** Close enough to the prescription to count as having done the week. */
+const NEARLY_ALL = 0.8;
+
+/** Consistently below this, after repeating, means the week is too big. */
+const TOO_HARD = 0.7;
+
+export function evaluateWeek(
+  week: PlanWeek,
+  sessions: WorkoutSession[],
+  /** How many times this week has already been repeated. */
+  repeats = 0,
+): GateResult {
   const runs = sessions.filter((s) => s.type === 'run');
   const planned = week.sessionsPerWeek;
 
-  const completed = runs.filter((s) => s.completion === 'full').length;
+  // A near-miss counts. Finishing six of seven intervals three times is a week
+  // of training, not a failed one.
+  const completed = runs.filter((s) => fractionDone(s) >= NEARLY_ALL).length;
   const attempted = runs.filter((s) => s.completion !== 'skipped').length;
   const missed = planned - attempted;
   // A session the runner said no to, rather than one that simply never
@@ -57,6 +86,35 @@ export function evaluateWeek(week: PlanWeek, sessions: WorkoutSession[]): GateRe
       overridable: true,
       strengthEmphasis: false,
     };
+  }
+
+  /**
+   * The week is repeatedly out of reach, so make it smaller.
+   *
+   * Repeating an unreachable week changes nothing, and the app used to do it
+   * indefinitely while saying the same sentence — which reads as the runner
+   * failing rather than the plan being wrong. Coming down is not a demotion:
+   * the prescription was a guess from one baseline run, and this is the guess
+   * being corrected by what actually happened.
+   */
+  const attemptedRuns = runs.filter((s) => s.completion !== 'skipped');
+  const fractions = attemptedRuns.map(fractionDone).filter((f) => f > 0);
+  const typical = fractions.length
+    ? [...fractions].sort((a, b) => a - b)[Math.floor(fractions.length / 2)]!
+    : 0;
+
+  if (repeats >= 2 && fractions.length >= 2 && typical < TOO_HARD) {
+    // Meet them a little above what they are actually managing, never below one.
+    const reps = Math.max(1, Math.min(week.reps - 1, Math.round(week.reps * typical) + 1));
+    if (reps < week.reps) {
+      return {
+        decision: 'ease',
+        reason: `You have run this week ${repeats + 1} times and it has not come together — which means the week is too big, not that you are behind. It comes down to ${reps} repetitions, and builds from there.`,
+        overridable: true,
+        strengthEmphasis: false,
+        easeTo: { runSec: week.runSec, reps },
+      };
+    }
   }
 
   if (completed < planned) {

@@ -427,3 +427,69 @@ describe('a session declined on purpose', () => {
     expect(one.decision).toBe('offer_repeat');
   });
 });
+
+describe('a week that is consistently out of reach', () => {
+  const week = {
+    index: 1,
+    runSec: 60,
+    walkSec: 90,
+    reps: 8,
+    sessionsPerWeek: 3,
+    isDeload: false,
+    totalRunSec: 1440,
+  };
+  const run = (intervals: number, id: string): WorkoutSession => ({
+    id,
+    date: '2026-08-24',
+    type: 'run',
+    planWeek: 1,
+    prescription: { runSec: 60, walkSec: 90, reps: 8 },
+    completion: intervals >= 8 ? 'full' : 'partial',
+    effort: null,
+    discomfort: null,
+    intervalsCompleted: intervals,
+    durationSec: null,
+    notes: null,
+  });
+
+  it('counts a near-miss as having done the session', () => {
+    // Seven of eight, three times, is a week of training. It used to score
+    // exactly the same as one interval three times: zero.
+    const nearly = evaluateWeek(week, [run(7, 'a'), run(7, 'b'), run(7, 'c')]);
+    expect(nearly.decision).toBe('advance');
+  });
+
+  it('still offers a repeat when the sessions really were cut short', () => {
+    const short = evaluateWeek(week, [run(3, 'a'), run(3, 'b'), run(3, 'c')]);
+    expect(short.decision).toBe('offer_repeat');
+  });
+
+  it('makes the week smaller once repeating it has stopped working', () => {
+    // The owner's own pattern: three or four of eight, week after week. The
+    // plan could previously only repeat, for ever, with the same sentence.
+    const stuck = evaluateWeek(week, [run(3, 'a'), run(4, 'b'), run(3, 'c')], 2);
+    expect(stuck.decision).toBe('ease');
+    expect(stuck.easeTo!.reps).toBeLessThan(week.reps);
+    expect(stuck.easeTo!.reps).toBeGreaterThanOrEqual(1);
+    expect(stuck.reason).toContain('too big');
+    expect(stuck.reason).not.toContain('missed');
+  });
+
+  it('does not ease on the first bad week', () => {
+    const first = evaluateWeek(week, [run(3, 'a'), run(3, 'b'), run(3, 'c')], 0);
+    expect(first.decision).toBe('offer_repeat');
+  });
+
+  it('does not ease a week that is nearly being met', () => {
+    // 6 of 8 is 0.75 — short of the "done" bar but not evidence the week is
+    // wrong, so repeating is still the right offer.
+    const close = evaluateWeek(week, [run(6, 'a'), run(6, 'b'), run(6, 'c')], 3);
+    expect(close.decision).toBe('offer_repeat');
+  });
+
+  it('never eases below a single repetition', () => {
+    const tiny = { ...week, reps: 2 };
+    const barely = evaluateWeek(tiny, [run(0, 'a'), run(1, 'b'), run(1, 'c')], 3);
+    if (barely.decision === 'ease') expect(barely.easeTo!.reps).toBeGreaterThanOrEqual(1);
+  });
+});

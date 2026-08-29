@@ -256,6 +256,9 @@ export const planRoutes = new Hono<AppEnv>()
     const gate = evaluateWeek(
       { ...week, isDeload: week.isDeload, sessionsPerWeek: week.sessionsPerWeek },
       rows.map(toSession),
+      // How many times this same week has already come round. Without it the
+      // gate is stateless and can only ever offer the same repeat again.
+      week.repeats,
     );
 
     // The gate judges a *whole* week. Asked on a Wednesday it will always
@@ -278,7 +281,7 @@ export const planRoutes = new Hono<AppEnv>()
     const userId = c.get('userId');
     const parsed = z
       .object({
-        action: z.enum(['advance', 'repeat', 'step_back', 'pause', 'resume']),
+        action: z.enum(['advance', 'repeat', 'step_back', 'pause', 'resume', 'ease']),
         override: z.boolean().default(false),
         /**
          * The week the caller was looking at when they decided.
@@ -291,6 +294,13 @@ export const planRoutes = new Hono<AppEnv>()
          * of the same request does nothing.
          */
         fromWeek: z.number().int().min(1).optional(),
+        /** For `ease`: the smaller week the gate offered. */
+        easeTo: z
+          .object({
+            runSec: z.number().int().min(30).max(3600),
+            reps: z.number().int().min(1).max(50),
+          })
+          .optional(),
       })
       .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'Invalid decision' }, 400);
@@ -322,6 +332,30 @@ export const planRoutes = new Hono<AppEnv>()
           .where(eq(schema.plans.id, plan.id));
         return c.json({ currentWeek: Math.min(next, last), completed: next > last });
       }
+      /**
+       * Bring the current week within reach and start it again.
+       *
+       * The only branch that makes a week smaller. The repeat counter is reset
+       * because this is a different week now — carrying it over would have the
+       * plan offering to ease an already-eased week straight away.
+       */
+      case 'ease': {
+        const target = parsed.data.easeTo;
+        if (!target) return c.json({ error: 'Nothing to ease to' }, 400);
+        await db
+          .update(schema.planWeeks)
+          .set({
+            reps: target.reps,
+            runSec: target.runSec,
+            totalRunSec: target.runSec * target.reps * 3,
+            repeats: 0,
+          })
+          .where(
+            and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
+          );
+        return c.json({ currentWeek: plan.currentWeek, eased: true });
+      }
+
       case 'repeat': {
         await db
           .update(schema.planWeeks)

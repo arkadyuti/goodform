@@ -237,7 +237,20 @@ export interface WorkoutSession {
 // Gating
 // ---------------------------------------------------------------------------
 
-export type GateDecision = 'advance' | 'offer_repeat' | 'repeat' | 'step_back' | 'pause_medical';
+export type GateDecision =
+  | 'advance'
+  | 'offer_repeat'
+  | 'repeat'
+  | 'step_back'
+  | 'pause_medical'
+  /**
+   * Make the week smaller.
+   *
+   * The plan could only go up or sideways. Someone finishing three of eight
+   * intervals every session got the same week, and the same sentence, for ever
+   * — the app repeating itself while claiming to adapt. This is the way down.
+   */
+  | 'ease';
 
 export interface GateResult {
   decision: GateDecision;
@@ -247,6 +260,8 @@ export interface GateResult {
   overridable: boolean;
   /** Extra strength emphasis recommended for the repeated week. */
   strengthEmphasis: boolean;
+  /** For `ease`: what the week should become. */
+  easeTo?: { runSec: number; reps: number };
 }
 
 // ---------------------------------------------------------------------------

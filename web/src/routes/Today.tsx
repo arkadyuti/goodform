@@ -942,6 +942,16 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
             {data.weekOver ? 'Repeat this week' : 'Repeat it rather than move on'}
           </Button>
         )}
+        {gate.decision === 'ease' && gate.easeTo && (
+          <Button
+            disabled={decide.isPending}
+            onClick={() =>
+              decide.mutate({ action: 'ease', fromWeek: data.week.index, easeTo: gate.easeTo })
+            }
+          >
+            Make the week smaller
+          </Button>
+        )}
         {gate.decision === 'step_back' && (
           <Button
             variant="secondary"
