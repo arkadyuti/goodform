@@ -36,6 +36,15 @@ export function StrengthSession() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Fixed before the first set, so every write below updates one record.
+   *
+   * Ticked sets used to live in React state until a final "save" button, so
+   * closing the app after twelve sets threw all twelve away. They are written
+   * as they are ticked now; the button at the end only leaves the screen.
+   */
+  const [sessionId] = useState(() => crypto.randomUUID());
+
   if (!profile || !session) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
@@ -47,19 +56,34 @@ export function StrengthSession() {
   const totalSets = session.exercises.reduce((sum, e) => sum + e.sets, 0);
   const doneSets = Object.values(setsDone).reduce((sum, n) => sum + n, 0);
 
+  /** What the session looks like given a set of ticks. */
+  const payload = (sets: Record<string, number>) => {
+    const done = Object.values(sets).reduce((sum, n) => sum + n, 0);
+    return {
+      id: sessionId,
+      date: today(),
+      type: 'strength' as const,
+      completion:
+        done >= totalSets
+          ? ('full' as const)
+          : done > 0
+            ? ('partial' as const)
+            : ('skipped' as const),
+      exerciseLog: sets,
+      effort: null,
+      discomfort: null,
+    };
+  };
+
+  // Fire-and-forget: a failure here is queued by `api.durable` and drains
+  // later, and the explicit save at the end reports anything that is not.
+  const record = (sets: Record<string, number>) => logSession.mutate(payload(sets));
+
   const save = async () => {
     setSaving(true);
     setError(null);
     try {
-      await logSession.mutateAsync({
-        id: crypto.randomUUID(),
-        date: today(),
-        type: 'strength',
-        completion: doneSets >= totalSets ? 'full' : doneSets > 0 ? 'partial' : 'skipped',
-        exerciseLog: setsDone,
-        effort: null,
-        discomfort: null,
-      });
+      await logSession.mutateAsync(payload(setsDone));
       void navigate('/');
     } catch {
       // Without this the button stayed on "Saving" for ever and the work was
@@ -168,7 +192,14 @@ export function StrengthSession() {
                     <button
                       key={i}
                       onClick={() =>
-                        setSetsDone((s) => ({ ...s, [exercise.id]: done > i ? i : i + 1 }))
+                        setSetsDone((s) => {
+                          const next = { ...s, [exercise.id]: done > i ? i : i + 1 };
+                          // Saved on the tick, not at the end. The offline
+                          // queue is keyed on the session id, so repeated
+                          // writes collapse into one rather than piling up.
+                          record(next);
+                          return next;
+                        })
                       }
                       aria-label={`Set ${i + 1} of ${exercise.name}`}
                       aria-pressed={done > i}

@@ -27,6 +27,9 @@ import { ConnectionState } from '../components/ConnectionState.tsx';
 
 type Stage = 'warmup' | 'intervals' | 'cooldown' | 'log';
 
+/** How often a run in progress is written down. */
+const PROGRESS_SAVE_MS = 60_000;
+
 export function RunSession() {
   const navigate = useNavigate();
   const { data: planData } = usePlan();
@@ -41,13 +44,63 @@ export function RunSession() {
   const [elapsedAtFinish, setElapsedAtFinish] = useState(0);
   const [intervalsDone, setIntervalsDone] = useState(0);
 
-  // Stable identity: the three setters never change, so this never does either,
-  // and the timer below is not rebuilt because the parent re-rendered.
-  const handleDone = useCallback((elapsed: number, completedIntervals: number) => {
-    setElapsedAtFinish(elapsed);
-    setIntervalsDone(completedIntervals);
-    setStage('cooldown');
-  }, []);
+  /**
+   * The session's identity, fixed before a single step is run.
+   *
+   * Both writes below use it, so the second updates the first rather than
+   * creating a second session: the offline queue is keyed on it and the server
+   * upsert matches on it.
+   */
+  const [sessionId] = useState(() => crypto.randomUUID());
+
+  // Everything the run itself produces. The form afterwards adds to this; it is
+  // not what creates it.
+  const record = useRef({ elapsed: 0, intervals: 0 });
+
+  /**
+   * The run is over, so the run is saved. Now, not after the form.
+   *
+   * This screen used to hold twenty minutes of work in React state until a
+   * final "save" button, so closing the app on the summary — or simply not
+   * getting to it — threw the whole session away with nothing anywhere to
+   * recover it from. The record now exists the moment the work is done; effort,
+   * discomfort and notes are an edit to it.
+   */
+  /**
+   * Writes the session as it stands. Same id every time, so the row is updated
+   * rather than a trail of half-sessions being left behind.
+   */
+  const saveProgress = useCallback(
+    (elapsed: number, completedIntervals: number, done = false) => {
+      if (!plan || !week) return;
+      logSession.mutate({
+        id: sessionId,
+        date: today(),
+        type: 'run',
+        planId: plan.id,
+        planWeek: plan.currentWeek,
+        prescription: { runSec: week.runSec, walkSec: week.walkSec, reps: week.reps },
+        completion: done && completedIntervals >= week.reps ? 'full' : 'partial',
+        intervalsCompleted: completedIntervals,
+        durationSec: Math.round(elapsed),
+        effort: null,
+        discomfort: null,
+        notes: null,
+      });
+    },
+    [logSession, plan, sessionId, week],
+  );
+
+  const handleDone = useCallback(
+    (elapsed: number, completedIntervals: number) => {
+      setElapsedAtFinish(elapsed);
+      setIntervalsDone(completedIntervals);
+      record.current = { elapsed, intervals: completedIntervals };
+      setStage('cooldown');
+      saveProgress(elapsed, completedIntervals, true);
+    },
+    [saveProgress],
+  );
 
   if (!week || !plan) {
     return (
@@ -96,6 +149,7 @@ export function RunSession() {
           reps={week.reps}
           settings={settings}
           onDone={handleDone}
+          onProgress={saveProgress}
         />
       )}
       {stage === 'cooldown' && <Cooldown onDone={() => setStage('log')} />}
@@ -104,9 +158,11 @@ export function RunSession() {
           planned={week.reps}
           completed={intervalsDone}
           durationSec={Math.round(elapsedAtFinish)}
+          // The same id as the write that already happened, so this fills the
+          // record in rather than creating a second one.
           onSave={async (input) => {
             await logSession.mutateAsync({
-              id: crypto.randomUUID(),
+              id: sessionId,
               date: today(),
               type: 'run',
               planId: plan.id,
@@ -243,6 +299,7 @@ function Intervals({
   reps,
   settings,
   onDone,
+  onProgress,
 }: {
   runSec: number;
   walkSec: number;
@@ -252,6 +309,15 @@ function Intervals({
     | null
     | undefined;
   onDone: (elapsedSec: number, completedIntervals: number) => void;
+  /**
+   * Where the run has got to, roughly once a minute.
+   *
+   * Finishing now saves the session, but a run abandoned in the middle — the
+   * phone dies, the app is killed, someone takes a call — still had nothing
+   * written anywhere. A record that says "four of eight" is worth far more
+   * than no record of a run that happened.
+   */
+  onProgress: (elapsedSec: number, completedIntervals: number) => void;
 }) {
   const intervals = useMemo(() => buildIntervals(runSec, walkSec, reps), [runSec, walkSec, reps]);
   const [state, setState] = useState<TimerState | null>(null);
@@ -280,12 +346,13 @@ function Intervals({
    * dropped, all silently, in the middle of a run. Keeping the handlers in a
    * ref means they can change freely while the timer stays put.
    */
-  const handlers = useRef({ cues, reps, onDone });
+  const lastSaved = useRef(0);
+  const handlers = useRef({ cues, reps, onDone, onProgress });
   // Refreshed after every render rather than during one, so nothing is written
   // to a ref while React is rendering. The timer's callbacks run later, so they
   // always see the current values.
   useEffect(() => {
-    handlers.current = { cues, reps, onDone };
+    handlers.current = { cues, reps, onDone, onProgress };
   });
 
   /**
@@ -306,7 +373,15 @@ function Intervals({
     const wake = new ScreenWakeLock();
     wakeRef.current = wake;
     const timer = new IntervalTimer(intervals, {
-      onTick: setState,
+      onTick: (next) => {
+        setState(next);
+        // Throttled to a minute: often enough that little is ever lost, rarely
+        // enough that it is not a request per frame.
+        const now = Date.now();
+        if (now - lastSaved.current < PROGRESS_SAVE_MS) return;
+        lastSaved.current = now;
+        handlers.current.onProgress(next.totalElapsed, Math.ceil(next.index / 2));
+      },
       onPhaseChange: (_from, to) => {
         if (!to) return;
         if (to.phase === 'run') handlers.current.cues.runCue();

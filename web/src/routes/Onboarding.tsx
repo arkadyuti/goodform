@@ -600,6 +600,9 @@ export function Onboarding() {
       {step === 'baseline' && baselineMode === 'guided' && (
         <BaselineRun
           onCancel={() => setBaselineMode(null)}
+          // Straight into the draft, which persists — so a run that ends with
+          // the app being closed is still a run that happened.
+          onRunStopped={(measured) => setMinutesRun(String(measured))}
           onDone={({ minutesRun: measured, stopReason: reason }) => {
             setMinutesRun(String(measured));
             setStopReason(reason);

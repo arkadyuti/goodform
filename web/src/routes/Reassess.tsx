@@ -126,6 +126,9 @@ export function Reassess() {
                   setStopReason(result.stopReason);
                   setMode('manual');
                 }}
+                // Keeps the number the moment the run ends, so closing the app
+                // on the last question does not cost another run outside.
+                onRunStopped={(measured) => setMinutes(String(measured))}
                 onCancel={() => setMode(null)}
               />
             </div>

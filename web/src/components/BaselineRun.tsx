@@ -16,9 +16,18 @@ type Stage = 'intro' | 'walk' | 'run' | 'why';
  */
 export function BaselineRun({
   onDone,
+  onRunStopped,
   onCancel,
 }: {
   onDone: (result: { minutesRun: number; stopReason: StopReason }) => void;
+  /**
+   * The number, the instant the run ends and before the last question.
+   *
+   * This is a real run outdoors, and it used to be held in component state
+   * until the runner answered "what made you stop?" — so closing the app on
+   * that question threw the run away and asked them to go and do it again.
+   */
+  onRunStopped: (minutesRun: number) => void;
   onCancel: () => void;
 }) {
   const [stage, setStage] = useState<Stage>('intro');
@@ -78,7 +87,11 @@ export function BaselineRun({
   const stopRun = () => {
     cues.walkCue();
     void wakeLock.current?.release();
-    setRanSec((Date.now() - startedAt.current) / 1000);
+    const seconds = (Date.now() - startedAt.current) / 1000;
+    setRanSec(seconds);
+    // Reported before the last question, not after it — and rounded exactly as
+    // the summary below rounds it, so the two never disagree.
+    onRunStopped(Math.round((seconds / 60) * 2) / 2);
     setStage('why');
   };
 

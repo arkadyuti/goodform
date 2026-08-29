@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
+  DISCOMFORT_LOCATIONS,
+  EFFORT_LEVELS,
+  effortHint,
+  effortLabel,
+  severityHint,
+  severityLabel,
+  type DiscomfortLocation,
   DEFAULT_TRAINING_DAYS,
   WITHDRAWAL_MESSAGE,
   daysClear,
@@ -10,6 +17,7 @@ import {
 } from '@goodform/shared';
 import {
   emptyLog,
+  useLogSession,
   type SessionRow,
   useDailyLog,
   useDailyRange,
@@ -24,7 +32,7 @@ import {
   useWeekReview,
 } from '../api/hooks.ts';
 import { dayName, scheduleFor, shiftDays, today } from '../lib/date.ts';
-import { Button, Card, Eyebrow, LoadFailed, Note, Stepper } from '../components/ui.tsx';
+import { Button, Card, Choices, Eyebrow, LoadFailed, Note, Stepper } from '../components/ui.tsx';
 import { DueNow } from '../components/DueNow.tsx';
 import { Fuelling } from '../components/Fuelling.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
@@ -135,6 +143,17 @@ export function Today() {
                 min running, {week.walkSec / 60} min walking, × {week.reps}
               </span>
             </p>
+            {/*
+              What you are actually committing to. The card described the
+              shape of the session and left the length to be worked out from
+              it — so a week that reads as "1 minute of running" is twenty
+              minutes outside, and you only found that out once you had
+              started.
+            */}
+            <p className="mt-1.5 text-[0.9375rem] text-ink-soft">
+              {Math.round(((week.runSec + week.walkSec) * week.reps) / 60)} minutes in total,{' '}
+              {Math.round((week.runSec * week.reps) / 60)} of them running.
+            </p>
             <div className="mt-4">
               <IntervalRibbon
                 runSec={week.runSec}
@@ -179,6 +198,18 @@ export function Today() {
           </Button>
         </Card>
       )}
+
+      {/*
+        A session that was recorded but never described.
+        Finishing a run writes it immediately, which is the whole point — but
+        it means a session can exist with no effort or discomfort against it,
+        and discomfort is what moves the plan. This is where that gets asked,
+        without needing the run screen again.
+      */}
+      {ready &&
+        doneToday
+          .filter((session) => session.effort === null && session.completion !== 'skipped')
+          .map((session) => <HowItWent key={session.id} session={session} />)}
 
       {/*
         What that session just changed.
@@ -388,6 +419,129 @@ export function Today() {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * The short version of the post-session form, for a session already recorded.
+ *
+ * Only the two things the app cannot infer: how hard it felt, and whether
+ * anything hurt. Everything else — duration, repetitions, whether it was
+ * finished — was written when the run ended.
+ */
+function HowItWent({ session }: { session: SessionRow }) {
+  const log = useLogSession();
+  const [effort, setEffort] = useState(3);
+  const [hurt, setHurt] = useState(false);
+  const [location, setLocation] = useState<DiscomfortLocation>('shin');
+  const [severity, setSeverity] = useState<1 | 2 | 3 | 4 | 5>(2);
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  const submit = () =>
+    log.mutate(
+      {
+        id: session.id,
+        date: session.date,
+        type: session.type,
+        planWeek: session.planWeek,
+        prescription: session.prescription,
+        completion: session.completion,
+        durationSec: session.durationSec,
+        effort,
+        discomfort: hurt ? { location, severity } : null,
+        notes: null,
+      },
+      { onSuccess: () => setDismissed(true) },
+    );
+
+  return (
+    <Card>
+      <Eyebrow as="h2">How did it go?</Eyebrow>
+      <p className="mt-1.5 leading-snug text-ink-soft">
+        Your {session.type === 'strength' ? 'strength session' : 'run'} is already saved. These two
+        answers are what the plan reads.
+      </p>
+
+      <div className="mt-3">
+        <span className="eyebrow">Effort</span>
+        <div className="mt-1.5 flex gap-1.5">
+          {EFFORT_LEVELS.map((level) => (
+            <button
+              key={level.value}
+              type="button"
+              aria-pressed={effort === level.value}
+              aria-label={`${level.value} of 5 — ${level.label}`}
+              onClick={() => setEffort(level.value)}
+              className={`tap flex-1 rounded-xl border text-[0.9375rem] transition-colors ${
+                effort === level.value
+                  ? 'border-ink bg-ink text-chalk'
+                  : 'border-line bg-paper hover:border-ink-faint'
+              }`}
+            >
+              {level.value}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[0.8125rem] leading-snug text-ink-faint">
+          <span className="text-ink-soft">{effortLabel(effort)}</span> — {effortHint(effort)}
+        </p>
+      </div>
+
+      <div className="mt-3">
+        <Choices
+          multiple
+          value={hurt ? ['hurt'] : []}
+          onChange={(next) => setHurt(next.includes('hurt'))}
+          options={[{ value: 'hurt', label: 'Something hurt or felt off' }]}
+        />
+      </div>
+
+      {hurt && (
+        <div className="mt-2.5">
+          <Choices
+            columns={2}
+            value={[location]}
+            onChange={([v]) => v && setLocation(v)}
+            options={DISCOMFORT_LOCATIONS.map((site) => ({ value: site, label: site }))}
+          />
+          <div className="mt-2 flex gap-1.5">
+            {([1, 2, 3, 4, 5] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                aria-pressed={severity === n}
+                aria-label={`${n} of 5 — ${severityLabel(n)}`}
+                onClick={() => setSeverity(n)}
+                className={`tap flex-1 rounded-xl border text-[0.9375rem] transition-colors ${
+                  severity === n
+                    ? n >= 4
+                      ? 'border-alert bg-alert text-white'
+                      : 'border-walk bg-walk text-ink'
+                    : 'border-line bg-paper hover:border-ink-faint'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[0.9375rem] leading-snug">
+            <span style={{ fontWeight: 600 }}>{severityLabel(severity)}</span>
+            <span className="text-ink-soft"> — {severityHint(severity)}</span>
+          </p>
+        </div>
+      )}
+
+      <div className="mt-3 flex gap-2.5">
+        <Button full disabled={log.isPending} onClick={submit}>
+          {log.isPending ? 'Saving' : 'Save'}
+        </Button>
+        <Button variant="quiet" onClick={() => setDismissed(true)}>
+          Later
+        </Button>
+      </div>
+    </Card>
   );
 }
 
