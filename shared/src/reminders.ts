@@ -223,7 +223,19 @@ export function dueReminders(context: ReminderContext): DueReminder[] {
       const firstNudge =
         (record?.attempts ?? 0) === 0 && inWindow(dose.dueTime, localTime, CATCH_UP_MINUTES);
 
-      if ((firstNudge || resumingSnooze) && mayInterrupt) {
+      /**
+       * A resumed snooze is never an interruption.
+       *
+       * "Remind me in 30 minutes" is a request, and the app picked the time it
+       * would land on. An evening medicine is the most likely thing to be
+       * snoozed, and thirty minutes from a 21:40 nudge falls squarely inside
+       * the default quiet window — so the reminder the runner explicitly asked
+       * for was dropped, and because dropping it never clears `snoozedUntil`,
+       * it never came back at all. Same argument as a dose deliberately
+       * scheduled inside quiet hours: quiet hours stop what you did not ask
+       * for.
+       */
+      if ((firstNudge && mayInterrupt) || resumingSnooze) {
         const attempt = resumingSnooze ? Math.max(1, record.attempts) : 1;
         out.push({
           kind: 'regimen',

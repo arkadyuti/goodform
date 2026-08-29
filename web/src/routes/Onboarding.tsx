@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Profile, ScreeningFlag, StopReason } from '@goodform/shared';
-import { daysFor, listDays, proteinTarget } from '@goodform/shared';
+import { daysFor, listDays, proteinTarget, withinLimit } from '@goodform/shared';
 import {
   useGeneratePlan,
   useProfile,
@@ -332,7 +332,10 @@ export function Onboarding() {
               ]}
             />
           </Field>
-          <Next disabled={!draft.age || !draft.sexAtBirth} onClick={() => go('body')} />
+          <Next
+            disabled={!withinLimit('age', draft.age) || !draft.sexAtBirth}
+            onClick={() => go('body')}
+          />
         </Section>
       )}
 
@@ -380,7 +383,11 @@ export function Onboarding() {
             />
           </Field>
           <Next
-            disabled={!draft.heightCm || !draft.weightKg || !draft.dietaryPattern}
+            disabled={
+              !withinLimit('heightCm', draft.heightCm) ||
+              !withinLimit('weightKg', draft.weightKg) ||
+              !draft.dietaryPattern
+            }
             onClick={() => go('habits')}
           />
         </Section>
@@ -681,6 +688,7 @@ export function Onboarding() {
               {error && <Note tone="alert">{error}</Note>}
               <Next
                 disabled={
+                  !withinLimit('minutesRun', Number(minutesRun)) ||
                   minutesRun === '' ||
                   !stopReason ||
                   saveBaseline.isPending ||

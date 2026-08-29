@@ -213,6 +213,28 @@ export interface Discomfort {
  * written. Narrowing the type to what is actually stored makes that a compile
  * error instead of an `undefined` at runtime.
  */
+/**
+ * What the app will accept for the numbers onboarding asks for.
+ *
+ * One source, used by the server's validation and by the buttons that let you
+ * move on. The inputs carried `min`/`max` attributes that browsers do not
+ * enforce on a non-submitted form, so an age of 5 or a 999-minute baseline got
+ * all the way to "Build my plan" before anything objected.
+ */
+export const LIMITS = {
+  age: { min: 13, max: 100, unit: 'years' },
+  heightCm: { min: 90, max: 250, unit: 'cm' },
+  weightKg: { min: 25, max: 300, unit: 'kg' },
+  minutesRun: { min: 0, max: 120, unit: 'minutes' },
+} as const;
+
+/** True when a value is present and inside its limit. */
+export function withinLimit(field: keyof typeof LIMITS, value: number | null | undefined): boolean {
+  if (value === null || value === undefined || Number.isNaN(value)) return false;
+  const { min, max } = LIMITS[field];
+  return value >= min && value <= max;
+}
+
 export interface Prescription {
   runSec: number;
   walkSec: number;

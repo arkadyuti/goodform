@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
+  LIMITS,
   addDays,
   startOfWeek,
   GOALS,
@@ -128,7 +129,7 @@ export const planRoutes = new Hono<AppEnv>()
     const userId = c.get('userId');
     const parsed = z
       .object({
-        minutesRun: z.number().min(0).max(120),
+        minutesRun: z.number().min(LIMITS.minutesRun.min).max(LIMITS.minutesRun.max),
         stopReason: z.enum(STOP_REASONS),
         date: z.string().regex(ISO_DATE).optional(),
       })

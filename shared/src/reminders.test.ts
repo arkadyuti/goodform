@@ -422,3 +422,44 @@ describe('a snooze that crosses midnight', () => {
     expect(due).toEqual([]);
   });
 });
+
+describe('a snooze that expires inside quiet hours', () => {
+  // The most likely thing to be snoozed is an evening medicine, and the
+  // thirty-minute default from a 21:40 nudge lands inside the default quiet
+  // window. It used to be dropped — and because dropping it never cleared
+  // `snoozedUntil`, it never came back on any later tick either.
+  const key = 'i1:2026-08-24:21:30';
+  const snoozedTo = (minutes: number): Map<string, ReminderRecord> =>
+    new Map([
+      [
+        `regimen:${key}`,
+        {
+          kind: 'regimen',
+          key,
+          attempts: 1,
+          lastSentDate: '2026-08-24',
+          lastSentMinutes: 21 * 60 + 40,
+          snoozedUntilDate: '2026-08-24',
+          snoozedUntilMinutes: minutes,
+          resolved: false,
+        },
+      ],
+    ]);
+
+  const doses = () => doseStates([item({ times: ['21:30'] })], [], '2026-08-24', '22:10');
+
+  it('resumes, because the runner asked for it', () => {
+    const due = dueReminders(
+      context({ doses: doses(), localTime: '22:10', records: snoozedTo(22 * 60 + 10) }),
+    );
+    expect(due).toHaveLength(1);
+    expect(due[0]!.key).toBe(key);
+  });
+
+  it('still refuses a first nudge that nobody asked for, in the same window', () => {
+    // 21:50 is outside quiet hours as a dose time, so a tick at 22:10 with no
+    // snooze on record must stay silent.
+    const fresh = doseStates([item({ times: ['21:50'] })], [], '2026-08-24', '22:10');
+    expect(dueReminders(context({ doses: fresh, localTime: '22:10' }))).toEqual([]);
+  });
+});

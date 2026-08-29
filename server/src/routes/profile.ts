@@ -12,16 +12,17 @@ import {
   SEXES,
   SMOKING_STATUSES,
   UNITS,
+  LIMITS,
   RUN_DAYS_PER_WEEK,
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
 import { requireAuth, type AppEnv } from '../middleware.js';
 
 const profileSchema = z.object({
-  age: z.number().int().min(13).max(100),
+  age: z.number().int().min(LIMITS.age.min).max(LIMITS.age.max),
   sexAtBirth: z.enum(SEXES),
-  heightCm: z.number().min(90).max(250),
-  weightKg: z.number().min(25).max(300),
+  heightCm: z.number().min(LIMITS.heightCm.min).max(LIMITS.heightCm.max),
+  weightKg: z.number().min(LIMITS.weightKg.min).max(LIMITS.weightKg.max),
   units: z.enum(UNITS),
   dietaryPattern: z.enum(DIETARY_PATTERNS),
   exclusions: z.array(z.string().max(60)).max(30).default([]),
