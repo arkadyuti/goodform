@@ -270,6 +270,17 @@ export const planRoutes = new Hono<AppEnv>()
       .object({
         action: z.enum(['advance', 'repeat', 'step_back', 'pause', 'resume']),
         override: z.boolean().default(false),
+        /**
+         * The week the caller was looking at when they decided.
+         *
+         * `advance` reads the current week and writes the next one, so two
+         * taps — a slow network and an impatient thumb — moved the plan
+         * forward twice and skipped a week outright. In an app whose whole
+         * purpose is building gradually, that is the worst possible failure.
+         * Naming the week makes the decision about a specific one, so a repeat
+         * of the same request does nothing.
+         */
+        fromWeek: z.number().int().min(1).optional(),
       })
       .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'Invalid decision' }, 400);
@@ -277,6 +288,12 @@ export const planRoutes = new Hono<AppEnv>()
     const current = await activePlan(userId);
     if (!current) return c.json({ error: 'No active plan' }, 404);
     const { plan, weeks } = current;
+
+    // Already acted on. Answer with where the plan actually is rather than
+    // moving it again — the caller's screen is simply behind.
+    if (parsed.data.fromWeek !== undefined && parsed.data.fromWeek !== plan.currentWeek) {
+      return c.json({ currentWeek: plan.currentWeek, completed: false, alreadyApplied: true });
+    }
     const last = weeks[weeks.length - 1]?.index;
     if (last === undefined) return c.json({ error: 'This plan has no weeks' }, 409);
 

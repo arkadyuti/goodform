@@ -843,6 +843,7 @@ function PausedBanner({ reason }: { reason: string | null }) {
       <Button
         variant="secondary"
         className="mt-3"
+        disabled={decide.isPending}
         onClick={() => decide.mutate({ action: 'resume' })}
       >
         It has settled — resume
@@ -881,7 +882,12 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
           Week done
         </Eyebrow>
         <p className="mt-1.5 text-[1.0625rem] leading-snug">{gate.reason}</p>
-        <Button full className="mt-3.5" onClick={() => decide.mutate({ action: 'advance' })}>
+        <Button
+          full
+          className="mt-3.5"
+          disabled={decide.isPending}
+          onClick={() => decide.mutate({ action: 'advance', fromWeek: data.week.index })}
+        >
           Start next week
         </Button>
       </Card>
@@ -902,16 +908,27 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
       <p className="mt-1.5 leading-snug">{gate.reason}</p>
       <div className="mt-3.5 flex flex-wrap gap-2">
         {gate.decision === 'pause_medical' ? (
-          <Button variant="alert" onClick={() => decide.mutate({ action: 'pause' })}>
+          <Button
+            variant="alert"
+            disabled={decide.isPending}
+            onClick={() => decide.mutate({ action: 'pause', fromWeek: data.week.index })}
+          >
             Pause my plan
           </Button>
         ) : (
-          <Button onClick={() => decide.mutate({ action: 'repeat' })}>
+          <Button
+            disabled={decide.isPending}
+            onClick={() => decide.mutate({ action: 'repeat', fromWeek: data.week.index })}
+          >
             {data.weekOver ? 'Repeat this week' : 'Repeat it rather than move on'}
           </Button>
         )}
         {gate.decision === 'step_back' && (
-          <Button variant="secondary" onClick={() => decide.mutate({ action: 'step_back' })}>
+          <Button
+            variant="secondary"
+            disabled={decide.isPending}
+            onClick={() => decide.mutate({ action: 'step_back', fromWeek: data.week.index })}
+          >
             Step back a week
           </Button>
         )}
@@ -919,7 +936,9 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
           <Button
             variant="secondary"
             onClick={() =>
-              showRisk ? decide.mutate({ action: 'advance', override: true }) : setShowRisk(true)
+              showRisk
+                ? decide.mutate({ action: 'advance', override: true, fromWeek: data.week.index })
+                : setShowRisk(true)
             }
           >
             {showRisk ? 'Yes, move on anyway' : 'Move on to week ' + (data.week.index + 1)}

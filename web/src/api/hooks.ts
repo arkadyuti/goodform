@@ -345,6 +345,8 @@ export function useWeekDecision() {
     mutationFn: (input: {
       action: 'advance' | 'repeat' | 'step_back' | 'pause' | 'resume';
       override?: boolean;
+      /** The week the screen was showing, so a repeated tap is ignored. */
+      fromWeek?: number;
     }) => api.post('/plan/week-decision', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.plan });
