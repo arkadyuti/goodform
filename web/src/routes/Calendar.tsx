@@ -386,6 +386,7 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
   const { data: planData } = usePlan();
   const [adding, setAdding] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [entryId, setEntryId] = useState(() => crypto.randomUUID());
 
   const [type, setType] = useState<SessionType>(day.scheduled === 'strength' ? 'strength' : 'run');
   const [completion, setCompletion] = useState<'full' | 'partial' | 'skipped'>('full');
@@ -416,7 +417,12 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
 
   const doSave = async () => {
     await backfill.mutateAsync({
-      id: crypto.randomUUID(),
+      // One id per open form, not per tap. Offline the write is queued and
+      // resolves, but the list above still reads "nothing logged" — so the
+      // obvious thing to do is enter it again, and a fresh id each time meant
+      // two rows on the next flush. On a screen whose whole purpose is that an
+      // unlogged week steps the plan backwards, double-counting is worse.
+      id: entryId,
       date: day.date,
       type,
       planId: type === 'run' ? (plan?.id ?? null) : null,
@@ -435,6 +441,9 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
       notes: 'Added later from the calendar',
     });
     setAdding(false);
+    // A new id for the next entry, so two genuinely different sessions on one
+    // day stay two.
+    setEntryId(crypto.randomUUID());
     setMinutes('');
     setLocation(null);
     setSeverity(0);

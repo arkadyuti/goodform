@@ -11,6 +11,7 @@ import {
 } from '@goodform/shared';
 import { useLogSession, usePlan, useProfile } from '../api/hooks.ts';
 import { today } from '../lib/date.ts';
+import { clearSessionId, sessionIdFor } from '../lib/sessionId.ts';
 import { Cues, hapticsSupported } from '../timer/cues.ts';
 import {
   IntervalTimer,
@@ -51,7 +52,7 @@ export function RunSession() {
    * creating a second session: the offline queue is keyed on it and the server
    * upsert matches on it.
    */
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(() => sessionIdFor(today(), 'run'));
 
   // Everything the run itself produces. The form afterwards adds to this; it is
   // not what creates it.
@@ -172,6 +173,8 @@ export function RunSession() {
               durationSec: Math.round(elapsedAtFinish),
               ...input,
             });
+            // Finished and described: the next run today is a new one.
+            clearSessionId(today(), 'run');
             void navigate('/');
           }}
         />

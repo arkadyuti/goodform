@@ -109,6 +109,15 @@ export const sessionRoutes = new Hono<AppEnv>()
     // authorisation boundary: on the primary key alone, a request naming
     // someone else's session id would overwrite *their* record — and because
     // `values` carries userId, it would hand the row over as well.
+    // What this session was before this write, so the strength counter below
+    // can fire on a transition rather than on every POST.
+    const [before] = await db
+      .select({ completion: schema.workoutSessions.completion })
+      .from(schema.workoutSessions)
+      .where(
+        and(eq(schema.workoutSessions.userId, userId), eq(schema.workoutSessions.id, s.id)),
+      );
+
     const [written] = await db
       .insert(schema.workoutSessions)
       .values(values)
@@ -120,8 +129,18 @@ export const sessionRoutes = new Hono<AppEnv>()
       .returning({ id: schema.workoutSessions.id });
     if (!written) return c.json({ error: 'Not found' }, 404);
 
-    // FR-5.7: completed strength work advances the prescription next time.
-    if (s.type === 'strength' && s.completion === 'full' && s.exerciseLog) {
+    /**
+     * FR-5.7: completed strength work advances the prescription next time.
+     *
+     * Once per session, not once per write. A strength session is now saved as
+     * each set is ticked, and again from the save button, so counting every
+     * POST that arrived `full` advanced the prescribed reps at double rate —
+     * in an app whose whole argument is that tendons take months. Firing only
+     * when the session *becomes* complete also makes a replayed offline write
+     * harmless.
+     */
+    const becameComplete = s.completion === 'full' && before?.completion !== 'full';
+    if (s.type === 'strength' && becameComplete && s.exerciseLog) {
       for (const exerciseId of Object.keys(s.exerciseLog)) {
         await db
           .insert(schema.strengthProgress)

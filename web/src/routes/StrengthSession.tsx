@@ -1,8 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { buildStrengthSessions, progressReps } from '@goodform/shared';
-import { useLogSession, useProfile, useStrengthProgress, useWeekReview } from '../api/hooks.ts';
+import {
+  useSessions,
+  useLogSession,
+  useProfile,
+  useStrengthProgress,
+  useWeekReview,
+} from '../api/hooks.ts';
 import { today } from '../lib/date.ts';
+import { clearSessionId, sessionIdFor } from '../lib/sessionId.ts';
 import { Button, Card, Eyebrow, Note } from '../components/ui.tsx';
 import { StopRules } from '../components/StopRules.tsx';
 
@@ -32,7 +39,23 @@ export function StrengthSession() {
   // Alternate the two sessions across the week.
   const slot = new Date().getDay() >= 4 ? 1 : 0;
   const session = sessions[slot] ?? sessions[0];
-  const [setsDone, setSetsDone] = useState<Record<string, number>>({});
+  /**
+   * Sets already recorded today, read back on mount.
+   *
+   * The ticks are written as they happen, but the screen did not read them —
+   * so a refresh showed 0 of 12 with six already saved, and ticking again
+   * wrote them a second time.
+   */
+  const { data: todaysSessions } = useSessions(today());
+  const recorded = todaysSessions?.sessions.find(
+    (session) => session.type === 'strength' && session.date === today(),
+  );
+  // Derived rather than hydrated through an effect: until this screen is
+  // touched, what the server already has *is* the state.
+  const [edits, setEdits] = useState<Record<string, number> | null>(null);
+  const setsDone = edits ?? recorded?.exerciseLog ?? {};
+  const setSetsDone = (next: (current: Record<string, number>) => Record<string, number>) =>
+    setEdits(next(setsDone));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +66,7 @@ export function StrengthSession() {
    * closing the app after twelve sets threw all twelve away. They are written
    * as they are ticked now; the button at the end only leaves the screen.
    */
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(() => sessionIdFor(today(), 'strength'));
 
   if (!profile || !session) {
     return (
@@ -84,6 +107,7 @@ export function StrengthSession() {
     setError(null);
     try {
       await logSession.mutateAsync(payload(setsDone));
+      clearSessionId(today(), 'strength');
       void navigate('/');
     } catch {
       // Without this the button stayed on "Saving" for ever and the work was
