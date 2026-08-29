@@ -222,15 +222,13 @@ export function Today() {
       */}
       {ready && (runDone || strengthDone) && plan?.status === 'active' && week && (
         <WeekProgress
-          runsDone={
-            (sessionData?.sessions ?? []).filter(
-              (session) =>
-                (session.type === 'run' || session.type === 'baseline') &&
-                session.completion !== 'skipped' &&
-                session.date >= startOfWeek(date) &&
-                session.date <= date,
-            ).length
-          }
+          runsThisWeek={(sessionData?.sessions ?? []).filter(
+            (session) =>
+              (session.type === 'run' || session.type === 'baseline') &&
+              session.completion !== 'skipped' &&
+              session.date >= startOfWeek(date) &&
+              session.date <= date,
+          )}
           runsPlanned={week.sessionsPerWeek}
           weekIndex={plan.currentWeek}
         />
@@ -558,32 +556,48 @@ function HowItWent({ session }: { session: SessionRow }) {
  * is the count, and what the count is heading towards.
  */
 function WeekProgress({
-  runsDone,
+  runsThisWeek,
   runsPlanned,
   weekIndex,
 }: {
-  runsDone: number;
+  runsThisWeek: SessionRow[];
   runsPlanned: number;
   weekIndex: number;
 }) {
-  const left = Math.max(0, runsPlanned - runsDone);
+  // Turning up and finishing are different things, and the week's gate reads
+  // the second one. Counting only attendance here meant this card could say
+  // "that is the week" while the review that followed said not every session
+  // finished as planned — the two disagreeing about the same week.
+  const attended = runsThisWeek.length;
+  const finished = runsThisWeek.filter((session) => session.completion === 'full').length;
+  const cutShort = attended - finished;
+  const left = Math.max(0, runsPlanned - attended);
   return (
     <Card>
       <Eyebrow as="h2">Where week {weekIndex} stands</Eyebrow>
       <p className="mt-1.5 flex items-baseline gap-2">
         <span className="tabular text-4xl" style={{ fontWeight: 800 }}>
-          {runsDone}
+          {attended}
         </span>
         <span className="text-ink-soft">
           of {runsPlanned} run{runsPlanned === 1 ? '' : 's'} this week
         </span>
       </p>
+      {cutShort > 0 && (
+        <p className="mt-1 text-[0.9375rem] leading-snug text-ink-soft">
+          {finished === 0
+            ? `${cutShort === 1 ? 'It was' : 'They were'} cut short — which counts, and is what the plan reads at the review.`
+            : `${finished} finished as planned, ${cutShort} cut short.`}
+        </p>
+      )}
       <p className="mt-2 leading-snug text-ink-soft">
-        {left === 0
-          ? 'That is the week. Nothing above mild discomfort and the plan moves on at the review.'
-          : left === 1
+        {left > 0
+          ? left === 1
             ? 'One more and the week is done.'
-            : `${left} to go.`}
+            : `${left} to go.`
+          : finished >= runsPlanned
+            ? 'That is the week. Nothing above mild discomfort and the plan moves on at the review.'
+            : 'That is three sessions. Because some were cut short, the review will offer to repeat the week rather than move on — which is the plan being careful, not you falling behind.'}
       </p>
       <Link to="/plan" className="mt-3 block text-[0.875rem] text-run underline underline-offset-4">
         See the week
