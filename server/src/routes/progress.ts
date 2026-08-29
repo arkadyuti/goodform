@@ -9,10 +9,12 @@ import {
   isDueOn,
   proteinTarget,
   DEFAULT_TRAINING_DAYS,
+  reachedTheInterval,
   scheduleFor,
   startOfWeek,
   type Adherence,
   type WorkoutSession,
+  type Completion,
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
 import { dateRangeFrom, requireAuth, todayFrom, type AppEnv } from '../middleware.js';
@@ -105,6 +107,13 @@ export const progressRoutes = new Hono<AppEnv>()
     const strength = sessions.filter((s) => s.type === 'strength');
 
     const longestRunSec = runs.reduce((max, s) => {
+      if (
+        !reachedTheInterval({
+          completion: s.completion as Completion,
+          intervalsCompleted: s.intervalsCompleted,
+        })
+      )
+        return max;
       const prescription = s.prescription as { runSec?: number } | null;
       return Math.max(max, prescription?.runSec ?? 0);
     }, 0);
@@ -131,8 +140,24 @@ export const progressRoutes = new Hono<AppEnv>()
           .orderBy(schema.planWeeks.index)
       : [];
 
+    /**
+     * Runs asked for so far, over weeks that have actually elapsed.
+     *
+     * Two things made this read "7 of 6". The denominator counted the current
+     * week in full the moment it began — so Monday morning of week three
+     * already showed six missed sessions — and it only grew when the runner
+     * tapped a weekly gate, so someone who never taps one has a denominator
+     * frozen at three while the numerator climbs. The numerator, meanwhile,
+     * counted baseline assessments as planned runs.
+     */
+    const weeksElapsed = plan
+      ? Math.min(
+          weeks.filter((w) => w.index <= plan.currentWeek).length,
+          Math.floor(daysBetween(plan.startDate, await todayFrom(c)) / 7) + 1,
+        )
+      : 0;
     const plannedRuns = weeks
-      .filter((w) => w.index <= (plan?.currentWeek ?? 0))
+      .filter((w) => w.index <= weeksElapsed)
       .reduce((sum, w) => sum + w.sessionsPerWeek * (1 + w.repeats), 0);
 
     const checks = await db
@@ -144,7 +169,8 @@ export const progressRoutes = new Hono<AppEnv>()
 
     return c.json({
       adherence: {
-        runsCompleted: runs.filter((s) => s.completion === 'full').length,
+        // A baseline is a one-off assessment, not one of the planned runs.
+        runsCompleted: runs.filter((s) => s.type === 'run' && s.completion === 'full').length,
         runsPlanned: plannedRuns,
         strengthCompleted: strength.filter((s) => s.completion === 'full').length,
       },
@@ -358,11 +384,20 @@ export const progressRoutes = new Hono<AppEnv>()
       logs,
       previousLogs,
       proteinByDate: protein,
-      // A withdrawn target must not reappear inside the weekly review.
-      proteinTargetG:
-        profileRow && !settingsRow?.targetsWithdrawnAt
-          ? proteinTarget(profileRow.weightKg).targetG
-          : null,
+      /**
+       * The target as it was that week, not as it is today.
+       *
+       * This read the *current* profile weight, and every weekly check-in
+       * writes its weight back to the profile — so stepping on the scales
+       * today rewrote how many days you hit your protein target last month.
+       * A finished week is a finished week.
+       */
+      proteinTargetG: settingsRow?.targetsWithdrawnAt
+        ? null
+        : (() => {
+            const weightThen = withinWeek?.weightKg ?? before?.weightKg ?? profileRow?.weightKg;
+            return weightThen ? proteinTarget(Number(weightThen)).targetG : null;
+          })(),
       check: withinWeek,
       previousCheck: before,
       previousLongestRunSec,

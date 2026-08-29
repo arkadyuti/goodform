@@ -219,6 +219,23 @@ export interface Prescription {
   reps: number;
 }
 
+/**
+ * Whether a session actually reached the interval it was prescribed.
+ *
+ * The headline "longest unbroken interval" was a plain max over every session's
+ * prescription, including ones the runner marked `skipped` — so backfilling a
+ * skipped 50-minute session made the Progress screen claim fifty minutes
+ * unbroken, directly above a chart that said four. Three call sites computed
+ * this differently; this is the one rule.
+ */
+export function reachedTheInterval(session: {
+  completion: Completion;
+  intervalsCompleted: number | null;
+}): boolean {
+  if (session.completion === 'skipped') return false;
+  return session.completion === 'full' || (session.intervalsCompleted ?? 0) > 0;
+}
+
 export interface WorkoutSession {
   id: string;
   date: string;

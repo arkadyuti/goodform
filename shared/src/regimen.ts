@@ -119,7 +119,12 @@ export function bandOrder(id: TimeBandId): number {
 
 /** True when a scheduled item wants a dose on this calendar day. */
 export function isDueOn(item: RegimenItem, date: string): boolean {
-  if (item.archivedAt) return false;
+  // Archiving stops an item from here on; it does not unmake the weeks it was
+  // being taken. Returning false for every date meant "stop taking this" also
+  // erased its whole adherence history — last week's finished review went from
+  // "9 of 14 ticked" to nothing, and past calendar days read "2 taken out of 0
+  // due". The route's own comment promises the opposite.
+  if (item.archivedAt && date >= item.archivedAt.slice(0, 10)) return false;
   // As-needed items are logged when taken; they are never overdue.
   if (item.scheduleKind === 'as_needed') return false;
   if (date < item.anchorDate) return false;
@@ -308,20 +313,43 @@ export function adherenceFor(
   from: string,
   to: string,
 ): Adherence {
-  const logged = new Map(
-    events
-      .filter((e) => e.itemId === item.id)
-      .map((e) => [eventKey(e.itemId, e.dueDate, e.dueTime), e.status]),
-  );
+  const mine = events.filter((e) => e.itemId === item.id);
+  const logged = new Map(mine.map((e) => [eventKey(e.itemId, e.dueDate, e.dueTime), e.status]));
+
+  /**
+   * What was ticked on a given day, whatever time it was ticked *for*.
+   *
+   * Adherence is rebuilt from the item's schedule as it is now, and events are
+   * matched on `itemId|date|time`. Move a supplement from 08:00 to 09:00 and
+   * every past tick stops matching, so a history of nine doses out of fourteen
+   * silently became zero out of fourteen — while the calendar, which counts by
+   * date alone, still showed them. Two screens, contradictory numbers, same
+   * rows. Falling back to the day means a schedule change no longer rewrites
+   * the past.
+   */
+  const byDate = new Map<string, string[]>();
+  for (const event of mine) {
+    byDate.set(event.dueDate, [...(byDate.get(event.dueDate) ?? []), event.status]);
+  }
+
   let due = 0;
   let taken = 0;
   let skipped = 0;
 
   for (let date = from; date <= to; date = addDays(date, 1)) {
     if (!isDueOn(item, date)) continue;
+
+    const exact: string[] = [];
     for (const time of item.times) {
-      due += 1;
       const status = logged.get(eventKey(item.id, date, time));
+      if (status) exact.push(status);
+    }
+    // Exact slot matches when the schedule has not moved; otherwise the day's
+    // events, capped at what the day actually asks for.
+    const statuses = exact.length ? exact : (byDate.get(date) ?? []).slice(0, item.times.length);
+
+    due += item.times.length;
+    for (const status of statuses) {
       if (status === 'taken') taken += 1;
       else if (status === 'skipped') skipped += 1;
     }

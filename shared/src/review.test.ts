@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildWeeklyReview, type WeeklyReviewInput } from './review.js';
 import { assessNutritionRisk } from './guardrails.js';
+import { reachedTheInterval } from './types.js';
 import type { WorkoutSession } from './types.js';
 
 function session(over: Partial<WorkoutSession> = {}): WorkoutSession {
@@ -198,5 +199,24 @@ describe('assessNutritionRisk', () => {
     const message = assessNutritionRisk({ ...base, checks: [{ date: '2026-08-24', weightKg: 50 }] }).message;
     expect(message.toLowerCase()).not.toMatch(/disorder|anorexi|bulimi|diagnos/);
     expect(message).toContain('Settings');
+  });
+});
+
+describe('what counts as reaching an interval', () => {
+  it('excludes a session the runner marked skipped', () => {
+    // Backfilling a skipped session sends the plan week's full prescription,
+    // so an unmarked max made the Progress headline claim fifty minutes
+    // unbroken from a run that never happened.
+    expect(reachedTheInterval({ completion: 'skipped', intervalsCompleted: null })).toBe(false);
+    expect(reachedTheInterval({ completion: 'skipped', intervalsCompleted: 8 })).toBe(false);
+  });
+
+  it('includes a finished session, and a partial one that got through any of it', () => {
+    expect(reachedTheInterval({ completion: 'full', intervalsCompleted: null })).toBe(true);
+    expect(reachedTheInterval({ completion: 'partial', intervalsCompleted: 1 })).toBe(true);
+  });
+
+  it('excludes a partial that got through none of it', () => {
+    expect(reachedTheInterval({ completion: 'partial', intervalsCompleted: 0 })).toBe(false);
   });
 });
