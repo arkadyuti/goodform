@@ -235,6 +235,16 @@ export const planWeeks = pgTable(
     totalRunSec: integer('total_run_sec').notNull(),
     /** How many times this week has been repeated. */
     repeats: integer('repeats').notNull().default(0),
+    /**
+     * When the runner pushed past a gate, and what it had decided.
+     *
+     * FR-3.3 says overrides are recorded, never blocked. The blocking half was
+     * true and the recording half was not: the flag was parsed and dropped, so
+     * pushing past a severity-4 medical pause left no trace anywhere — not in
+     * the app, not in the export a physiotherapist might actually read.
+     */
+    overriddenAt: timestamp('overridden_at', { withTimezone: true }),
+    overriddenGate: text('overridden_gate'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (t) => [primaryKey({ columns: [t.planId, t.index] })],

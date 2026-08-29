@@ -973,7 +973,12 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
             variant="secondary"
             onClick={() =>
               showRisk
-                ? decide.mutate({ action: 'advance', override: true, fromWeek: data.week.index })
+                ? decide.mutate({
+                    action: 'advance',
+                    override: true,
+                    fromWeek: data.week.index,
+                    overriddenGate: gate.decision,
+                  })
                 : setShowRisk(true)
             }
           >

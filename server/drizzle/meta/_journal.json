@@ -50,6 +50,13 @@
       "when": 1787635666163,
       "tag": "0006_wet_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788033940507,
+      "tag": "0007_gigantic_darkstar",
+      "breakpoints": true
     }
   ]
 }

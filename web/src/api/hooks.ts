@@ -193,6 +193,8 @@ export function useWeekReview(enabled = true) {
           overridable: boolean;
           strengthEmphasis: boolean;
           easeTo?: { runSec: number; reps: number };
+          /** The verdict being pushed past, so the override is on the record. */
+          overriddenGate?: string;
         };
         week: PlanWeekRow;
         range: { from: string; to: string };
@@ -364,6 +366,8 @@ export function useWeekDecision() {
       /** The week the screen was showing, so a repeated tap is ignored. */
       fromWeek?: number;
       easeTo?: { runSec: number; reps: number };
+      /** The verdict being pushed past, so the override is on the record. */
+      overriddenGate?: string;
     }) => api.post('/plan/week-decision', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.plan });

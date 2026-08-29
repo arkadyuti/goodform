@@ -318,6 +318,8 @@ export const planRoutes = new Hono<AppEnv>()
          * of the same request does nothing.
          */
         fromWeek: z.number().int().min(1).optional(),
+        /** What the gate had decided, when the runner pushes past it. */
+        overriddenGate: z.string().max(40).optional(),
         /** For `ease`: the smaller week the gate offered. */
         easeTo: z
           .object({
@@ -345,7 +347,16 @@ export const planRoutes = new Hono<AppEnv>()
       case 'advance': {
         await db
           .update(schema.planWeeks)
-          .set({ completedAt: new Date() })
+          .set({
+            completedAt: new Date(),
+            // FR-3.3: the runner decides, and the decision is on the record.
+            ...(parsed.data.override
+              ? {
+                  overriddenAt: new Date(),
+                  overriddenGate: parsed.data.overriddenGate ?? 'unknown',
+                }
+              : {}),
+          })
           .where(
             and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
           );

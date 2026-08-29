@@ -210,6 +210,10 @@ function toCsv(dataset: Dataset, data: Collected): string {
           'is_deload',
           'repeats',
           'completed_at',
+          // A gate the runner pushed past. This is the column a physiotherapist
+          // would actually want, and it did not exist.
+          'overridden_at',
+          'overridden_gate',
         ],
         data.planWeeks.flatMap(({ planId, weeks }) => {
           const plan = data.plans.find((p) => p.id === planId);
@@ -226,6 +230,8 @@ function toCsv(dataset: Dataset, data: Collected): string {
             w.isDeload,
             w.repeats,
             w.completedAt,
+            w.overriddenAt,
+            w.overriddenGate,
           ]);
         }),
       );
