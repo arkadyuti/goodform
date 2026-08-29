@@ -116,7 +116,11 @@ export function Today() {
 
       {ready && plan && plan.status === 'paused' && <PausedBanner reason={plan.pausedReason} />}
       {ready && breakData?.onBreak && breakData.result && (
-        <WelcomeBack gapDays={breakData.gapDays ?? 0} result={breakData.result} />
+        <WelcomeBack
+          gapDays={breakData.gapDays ?? 0}
+          result={breakData.result}
+          currentWeek={plan?.currentWeek ?? 1}
+        />
       )}
       {ready && plan && plan.status === 'completed' && <BlockCompleteBanner />}
       {ready && <WeekGate hasPlan={plan?.status === 'active'} />}
@@ -735,9 +739,11 @@ function nextRunDate(from: string, days: TrainingDays): string {
 function WelcomeBack({
   gapDays,
   result,
+  currentWeek,
 }: {
   gapDays: number;
   result: { stepBackWeeks: number; needsReassessment: boolean; reason: string };
+  currentWeek: number;
 }) {
   const apply = useReturnFromBreak();
   const [dismissed, setDismissed] = useState(false);
@@ -760,7 +766,7 @@ function WelcomeBack({
         </Link>
       ) : (
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button disabled={apply.isPending} onClick={() => apply.mutate()}>
+          <Button disabled={apply.isPending} onClick={() => apply.mutate(currentWeek)}>
             {result.stepBackWeeks > 0 ? 'Step the plan back' : 'Pick up where I left off'}
           </Button>
           <Button variant="quiet" onClick={() => setDismissed(true)}>

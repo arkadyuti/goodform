@@ -584,6 +584,9 @@ export const planRoutes = new Hono<AppEnv>()
   /** FR-3.5: applies a proportional step-back after a gap in training. */
   .post('/return-from-break', async (c) => {
     const userId = c.get('userId');
+    const parsed = z
+      .object({ fromWeek: z.number().int().min(1).optional() })
+      .parse(await c.req.json().catch(() => ({})));
     const current = await activePlan(userId);
     if (!current) return c.json({ error: 'No active plan' }, 404);
 
@@ -597,6 +600,14 @@ export const planRoutes = new Hono<AppEnv>()
 
     const gapDays = daysBetween(latest.date, await todayFrom(c));
     const result = returnFromBreak(gapDays);
+
+    // Applying twice steps back twice: the gap has not changed, because
+    // stepping back logs nothing. The caller names the week it was looking at,
+    // so a second attempt on a plan that has already moved does nothing.
+    if (parsed.fromWeek !== undefined && parsed.fromWeek !== current.plan.currentWeek) {
+      return c.json({ applied: false, alreadyApplied: true, gapDays, result });
+    }
+
     if (result.stepBackWeeks > 0) {
       const back = Math.max(1, current.plan.currentWeek - result.stepBackWeeks);
       await db

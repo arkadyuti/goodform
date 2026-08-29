@@ -5,3 +5,7 @@ dist/
 .DS_Store
 coverage/
 dev-dist/
+
+# Throwaway verification scripts
+qa/
+**/qa/

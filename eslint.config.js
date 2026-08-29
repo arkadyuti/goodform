@@ -12,6 +12,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       'server/drizzle/**',
+      // Scratch space for throwaway verification scripts; not shipped.
+      '**/qa/**',
     ],
   },
 

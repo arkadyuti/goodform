@@ -583,7 +583,8 @@ export function useBreakCheck(enabled: boolean) {
 export function useReturnFromBreak() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post(`/plan/return-from-break?date=${today()}`, {}),
+    mutationFn: (fromWeek?: number) =>
+      api.post(`/plan/return-from-break?date=${today()}`, { fromWeek }),
     onSuccess: () => {
       void qc.invalidateQueries();
     },
