@@ -71,9 +71,14 @@ export function RunSession() {
    * Writes the session as it stands. Same id every time, so the row is updated
    * rather than a trail of half-sessions being left behind.
    */
+  // Once the run is over, nothing more should be written from a timer tick.
+  const finished = useRef(false);
+
   const saveProgress = useCallback(
     (elapsed: number, completedIntervals: number, done = false) => {
       if (!plan || !week) return;
+      if (finished.current && !done) return;
+      if (done) finished.current = true;
       logSession.mutate({
         id: sessionId,
         date: today(),

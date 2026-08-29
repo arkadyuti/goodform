@@ -351,7 +351,7 @@ export function Today() {
                 unit="ml"
                 step={250}
                 max={10000}
-                onChange={(waterMl) => saveLog.mutate({ ...log, waterMl })}
+                onChange={(waterMl) => saveLog.mutate({ waterMl })}
               />
             )}
             {tracked.includes('cigarettes') && (
@@ -359,7 +359,7 @@ export function Today() {
                 label="Cigarettes"
                 value={log.cigarettes}
                 max={100}
-                onChange={(cigarettes) => saveLog.mutate({ ...log, cigarettes })}
+                onChange={(cigarettes) => saveLog.mutate({ cigarettes })}
               />
             )}
             {tracked.includes('beer') && (
@@ -368,7 +368,7 @@ export function Today() {
                 value={log.beers}
                 unit={log.beers === 1 ? 'drink' : 'drinks'}
                 max={50}
-                onChange={(beers) => saveLog.mutate({ ...log, beers })}
+                onChange={(beers) => saveLog.mutate({ beers })}
               />
             )}
             {tracked.includes('alcohol') && (
@@ -378,7 +378,7 @@ export function Today() {
                 value={log.alcoholUnits}
                 unit="units"
                 max={50}
-                onChange={(alcoholUnits) => saveLog.mutate({ ...log, alcoholUnits })}
+                onChange={(alcoholUnits) => saveLog.mutate({ alcoholUnits })}
               />
             )}
             {tracked.includes('sleep') && (
@@ -388,7 +388,7 @@ export function Today() {
                 unit="hours"
                 step={0.5}
                 max={24}
-                onChange={(sleepHours) => saveLog.mutate({ ...log, sleepHours })}
+                onChange={(sleepHours) => saveLog.mutate({ sleepHours })}
               />
             )}
             {(settings?.customHabits ?? []).map((habit) => (

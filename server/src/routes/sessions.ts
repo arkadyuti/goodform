@@ -112,9 +112,44 @@ export const sessionRoutes = new Hono<AppEnv>()
     // What this session was before this write, so the strength counter below
     // can fire on a transition rather than on every POST.
     const [before] = await db
-      .select({ completion: schema.workoutSessions.completion })
+      .select({
+        completion: schema.workoutSessions.completion,
+        intervalsCompleted: schema.workoutSessions.intervalsCompleted,
+        durationSec: schema.workoutSessions.durationSec,
+      })
       .from(schema.workoutSessions)
       .where(and(eq(schema.workoutSessions.userId, userId), eq(schema.workoutSessions.id, s.id)));
+
+    /**
+     * A session never goes backwards.
+     *
+     * A run in progress is written about once a minute and again the moment it
+     * ends, both under the same id and both fire-and-forget. Two can be in
+     * flight at once — a tick at 12:00:00 and "End session" at 12:00:01 — and
+     * if the older lands second it overwrites the finished session with its own
+     * earlier snapshot: fewer intervals, a shorter duration, `completion` back
+     * to `partial`. Rather than trusting arrival order, these may only move
+     * forward.
+     */
+    if (before) {
+      if (before.completion === 'full' && patch.completion === 'partial') delete patch.completion;
+      if (
+        typeof patch.intervalsCompleted === 'number' &&
+        typeof before.intervalsCompleted === 'number' &&
+        patch.intervalsCompleted < before.intervalsCompleted
+      ) {
+        delete patch.intervalsCompleted;
+      }
+      if (
+        typeof patch.durationSec === 'number' &&
+        typeof before.durationSec === 'number' &&
+        patch.durationSec < before.durationSec
+      ) {
+        delete patch.durationSec;
+      }
+      // A straggling progress write carries no effort; it must not clear one.
+      if (patch.effort === null && before.completion === 'full') delete patch.effort;
+    }
 
     const [written] = await db
       .insert(schema.workoutSessions)

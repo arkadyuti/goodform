@@ -215,16 +215,17 @@ export function StrengthSession() {
                   {Array.from({ length: exercise.sets }, (_, i) => (
                     <button
                       key={i}
-                      onClick={() =>
-                        setSetsDone((s) => {
-                          const next = { ...s, [exercise.id]: done > i ? i : i + 1 };
-                          // Saved on the tick, not at the end. The offline
-                          // queue is keyed on the session id, so repeated
-                          // writes collapse into one rather than piling up.
-                          record(next);
-                          return next;
-                        })
-                      }
+                      onClick={() => {
+                        // Computed outside the updater: React may re-invoke
+                        // an updater — it does on every render under
+                        // StrictMode — and an updater that posts is not pure.
+                        const next = { ...setsDone, [exercise.id]: done > i ? i : i + 1 };
+                        setSetsDone(() => next);
+                        // Saved on the tick, not at the end. The offline
+                        // queue is keyed on the session id, so repeated
+                        // writes collapse into one rather than piling up.
+                        record(next);
+                      }}
                       aria-label={`Set ${i + 1} of ${exercise.name}`}
                       aria-pressed={done > i}
                       className={`tap flex-1 rounded-xl border font-semibold transition-colors ${

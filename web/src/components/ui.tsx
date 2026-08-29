@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { toggleChoice } from '../lib/choices.ts';
 
@@ -100,13 +100,44 @@ export function Stepper({
   tone?: 'neutral' | 'watch';
 }) {
   const clamp = (n: number) => Math.min(max, Math.max(min, Number(n.toFixed(2))));
+
+  /**
+   * What this stepper is showing, accumulated locally.
+   *
+   * The next value used to be computed from the `value` prop, which only
+   * catches up after the write lands. Ten quick taps therefore all read the
+   * same number and all wrote the same increment, so nine were lost — and
+   * sleep, at half-hour steps, needs fifteen taps for a normal night. Counting
+   * here is synchronous, so every tap lands. React's documented pattern for
+   * resyncing when the server does come back with something different.
+   */
+  const [shownFor, setShownFor] = useState(value);
+  const [shown, setShown] = useState(value);
+  if (shownFor !== value) {
+    setShownFor(value);
+    setShown(value);
+  }
+
+  // A functional update, so a burst of taps accumulates instead of every one of
+  // them reading the same render's number. Ten quick presses become 2500ml, and
+  // one write rather than ten.
+  const step_ = (delta: number) => setShown((current) => clamp(current + delta));
+
+  // Report the settled figure once React has folded the burst together.
+  const reported = useRef(value);
+  useEffect(() => {
+    if (shown === reported.current) return;
+    reported.current = shown;
+    onChange(shown);
+  }, [shown, onChange]);
+
   return (
     <div className="flex items-center justify-between gap-3 py-2.5">
       <div className="min-w-0">
         <p className="truncate text-[0.9375rem]">{label}</p>
         {hint && <p className="text-[0.75rem] leading-snug text-ink-faint">{hint}</p>}
         <p className="tabular text-2xl leading-tight" style={{ fontWeight: 600 }}>
-          <span className={tone === 'watch' && value > 0 ? 'text-alert' : ''}>{value}</span>
+          <span className={tone === 'watch' && shown > 0 ? 'text-alert' : ''}>{shown}</span>
           {unit && <span className="ml-1 text-sm font-normal text-ink-faint"> {unit}</span>}
         </p>
       </div>
@@ -114,8 +145,8 @@ export function Stepper({
         <button
           type="button"
           aria-label={`Remove one from ${label}`}
-          onClick={() => onChange(clamp(value - step))}
-          disabled={value <= min}
+          onClick={() => step_(-step)}
+          disabled={shown <= min}
           className="tap rounded-xl border border-line bg-paper text-xl leading-none transition-colors hover:border-ink-faint disabled:opacity-35"
         >
           −
@@ -123,7 +154,7 @@ export function Stepper({
         <button
           type="button"
           aria-label={`Add one to ${label}`}
-          onClick={() => onChange(clamp(value + step))}
+          onClick={() => step_(step)}
           className="tap rounded-xl bg-ink px-4 text-xl leading-none text-chalk transition-colors hover:bg-ink/90"
         >
           +

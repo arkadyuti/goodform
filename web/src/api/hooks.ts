@@ -389,8 +389,22 @@ export function useWeekDecision() {
 export function useSaveDailyLog(date: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (log: Partial<DailyLogRow>) =>
-      api.durable(`/logs/daily/${date}`, 'PUT', log, `daily:${date}`),
+    /**
+     * The whole day, built from the cache at the moment of the write.
+     *
+     * Callers used to pass `{ ...log, waterMl }` where `log` came from their
+     * own render. Ten quick taps on the water stepper all closed over the same
+     * value and all wrote `stale + 250`, so nine of them vanished — and the
+     * one field guaranteed to be tapped quickly is sleep, at 0.5-hour steps.
+     * Reading the cache here means each write builds on the one before it,
+     * however fast they arrive, while still sending the whole day so two
+     * offline edits cannot half-overwrite each other.
+     */
+    mutationFn: (patch: Partial<DailyLogRow>) => {
+      const current = qc.getQueryData<{ log: DailyLogRow | null }>(keys.dailyLog(date));
+      const whole = { ...(current?.log ?? emptyLog(date)), ...patch };
+      return api.durable(`/logs/daily/${date}`, 'PUT', whole, `daily:${date}`);
+    },
     onMutate: async (patch) => {
       // The habit steppers must feel instant, online or not.
       await qc.cancelQueries({ queryKey: keys.dailyLog(date) });
