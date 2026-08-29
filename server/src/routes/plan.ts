@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lte, ne } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   GOALS,
@@ -58,11 +58,21 @@ function toSession(row: typeof schema.workoutSessions.$inferSelect): WorkoutSess
   };
 }
 
-async function activePlan(userId: string) {
+/**
+ * The plan a runner is currently on.
+ *
+ * `paused` counts. Pausing is what the app asks for after real discomfort, and
+ * looking only for `active` meant every plan endpoint 404'd the moment someone
+ * took that advice — including `resume`, whose entire purpose is to leave the
+ * paused state. Following the safety advice bricked the plan, permanently, with
+ * no error shown.
+ */
+async function activePlan(userId: string, includePaused = true) {
+  const statuses = includePaused ? ['active', 'paused'] : ['active'];
   const [plan] = await db
     .select()
     .from(schema.plans)
-    .where(and(eq(schema.plans.userId, userId), eq(schema.plans.status, 'active')))
+    .where(and(eq(schema.plans.userId, userId), inArray(schema.plans.status, statuses)))
     .orderBy(desc(schema.plans.createdAt))
     .limit(1);
   if (!plan) return null;

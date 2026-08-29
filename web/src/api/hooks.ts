@@ -102,6 +102,14 @@ export interface SessionRow {
   discomfortLocation: string | null;
   discomfortSeverity: number | null;
   durationSec: number | null;
+  /**
+   * Everything `GET /sessions` returns. It used to stop short of these three,
+   * so a screen that re-saved a session could not forward what it was handed —
+   * and the write blanked them.
+   */
+  intervalsCompleted: number | null;
+  exerciseLog: Record<string, number> | null;
+  planId: string | null;
   /** The shared type, not a copy of it — the two had already drifted. */
   prescription: Prescription | null;
 }
@@ -352,6 +360,11 @@ export function useWeekDecision() {
       void qc.invalidateQueries({ queryKey: keys.plan });
       void qc.invalidateQueries({ queryKey: keys.weekReview });
     },
+    // Without this a failed decision was completely silent: the button posted,
+    // the server refused, and the card sat there as though nothing had been
+    // tapped. Whatever the reason, the runner should be able to see that it
+    // did not work.
+    onError: (error) => console.error('Week decision failed:', error),
   });
 }
 

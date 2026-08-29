@@ -56,8 +56,11 @@ export const sessionRoutes = new Hono<AppEnv>()
 
   .post('/', async (c) => {
     const userId = c.get('userId');
-    const parsed = sessionSchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: 'Invalid session', issues: parsed.error.issues }, 400);
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body) return c.json({ error: 'Invalid session' }, 400);
+    const parsed = sessionSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json({ error: 'Invalid session', issues: parsed.error.issues }, 400);
     const s = parsed.data;
 
     const values = {
@@ -78,6 +81,29 @@ export const sessionRoutes = new Hono<AppEnv>()
       notes: s.notes ?? null,
     };
 
+    /**
+     * On update, only touch what the caller actually sent.
+     *
+     * A session is written more than once — once when the run ends, again when
+     * the runner says how it went — and the second write knows less than the
+     * first. Updating every column meant the second one blanked the interval
+     * count and the whole per-exercise set log: twelve sets ticked one at a
+     * time, erased by the screen that was supposed to be adding to them.
+     *
+     * A field the caller omitted means "leave it alone". Clearing one is done
+     * by sending an explicit null, which the parsed body still distinguishes.
+     */
+    const patch = Object.fromEntries(
+      Object.entries(values).filter(([key]) => {
+        if (key === 'id' || key === 'userId') return false;
+        // `discomfort` arrives as one object and lands in two columns.
+        if (key === 'discomfortLocation' || key === 'discomfortSeverity') {
+          return 'discomfort' in body;
+        }
+        return key in body;
+      }),
+    );
+
     // The id is client-supplied, so the offline queue can retry a write without
     // logging the session twice. That makes the conflict clause an
     // authorisation boundary: on the primary key alone, a request naming
@@ -88,7 +114,7 @@ export const sessionRoutes = new Hono<AppEnv>()
       .values(values)
       .onConflictDoUpdate({
         target: schema.workoutSessions.id,
-        set: values,
+        set: patch,
         setWhere: eq(schema.workoutSessions.userId, userId),
       })
       .returning({ id: schema.workoutSessions.id });

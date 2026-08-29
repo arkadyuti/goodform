@@ -444,16 +444,15 @@ function HowItWent({ session }: { session: SessionRow }) {
   const submit = () =>
     log.mutate(
       {
+        // Only what this card is actually adding. The server leaves every
+        // field a caller does not send exactly as it was, so the interval
+        // count and the set log survive.
         id: session.id,
         date: session.date,
         type: session.type,
-        planWeek: session.planWeek,
-        prescription: session.prescription,
         completion: session.completion,
-        durationSec: session.durationSec,
         effort,
         discomfort: hurt ? { location, severity } : null,
-        notes: null,
       },
       { onSuccess: () => setDismissed(true) },
     );
