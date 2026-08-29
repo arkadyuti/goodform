@@ -104,8 +104,6 @@ most of the HIGH findings are fixed and deployed; these are what remain, ranked.
 Each was verified against the running app, not inferred from the code.
 
 ### Reminders
-- **A snooze that expires inside quiet hours is dropped for ever.** Snooze at
-  21:50 into a 22:00 quiet window and the nudge never returns.
 - **Moving one of several daily times still erases those ticks.** The day-level
   fallback covers a wholesale change; a partial one still mismatches.
 - **Adherence counts the whole of today as missed from midnight**, so the rate
@@ -119,8 +117,9 @@ Each was verified against the running app, not inferred from the code.
 ### The runner's experience
 - **Skip fabricates volume.** Skipping every interval still logs a full
   20-minute session at `completion: full`, which then feeds progression.
-- **Onboarding's `min`/`max` are decorative** — age 13 or 100, weight 25 kg and
-  height 250 cm are all accepted.
+- **A height/weight combination can still be absurd within its bounds** — 250 cm
+  and 25 kg are each individually allowed, and together give a BMI of 4 and a
+  38 g protein target. Each field is now range-checked; the *combination* is not.
 - **Today contradicts itself after an off-plan run**: "Logged and done" above a
   rest-day card still offering "Run today instead".
 - **Streak counters invent history** from days that were never logged, and
