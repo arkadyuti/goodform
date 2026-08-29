@@ -73,13 +73,14 @@ export async function flush(): Promise<number> {
   return sent;
 }
 
-/** Last-known-good copies so today's screen renders with no network. */
-export async function cacheSet(key: string, value: unknown): Promise<void> {
-  const db = await database();
-  await db.put('cache', value, key);
-}
-
-export async function cacheGet<T>(key: string): Promise<T | undefined> {
-  const db = await database();
-  return (await db.get('cache', key)) as T | undefined;
-}
+/*
+ * There was a `cacheSet`/`cacheGet` pair here, described as "last-known-good
+ * copies so today's screen renders with no network". Nothing ever called them.
+ * Offline reads are genuinely served — by the service worker's NetworkFirst
+ * rule in vite.config.ts — so the behaviour was real and this was not the thing
+ * doing it. A comment describing a job no code performs is worse than no
+ * comment: the next person reads it and believes the wrong thing.
+ *
+ * The `cache` object store stays in the schema; removing it would need a
+ * version bump for no gain.
+ */
