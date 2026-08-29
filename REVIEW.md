@@ -97,6 +97,45 @@ things deliberately left.
   rather than a wrong date, and the range validator rejects it. Documented in
   the tests.
 
+## Still open, from the 2026-08-29 bug hunt
+
+Five agents drove the app and simulated months of use. Everything CRITICAL and
+most of the HIGH findings are fixed and deployed; these are what remain, ranked.
+Each was verified against the running app, not inferred from the code.
+
+### Reminders
+- **A snooze that expires inside quiet hours is dropped for ever.** Snooze at
+  21:50 into a 22:00 quiet window and the nudge never returns.
+- **Moving one of several daily times still erases those ticks.** The day-level
+  fallback covers a wholesale change; a partial one still mismatches.
+- **Adherence counts the whole of today as missed from midnight**, so the rate
+  looks worse every morning and recovers through the day.
+- **A finished course keeps nagging** to reorder; `courseDaysRemaining` also
+  counts down a course that has not started.
+- **Supply inflates** when doses are ticked past zero and then un-ticked.
+- **`?permanent=true` leaves orphaned reminder rows**, and snooze-only rows
+  never expire.
+
+### The runner's experience
+- **Skip fabricates volume.** Skipping every interval still logs a full
+  20-minute session at `completion: full`, which then feeds progression.
+- **Onboarding's `min`/`max` are decorative** — age 13 or 100, weight 25 kg and
+  height 250 cm are all accepted.
+- **Today contradicts itself after an off-plan run**: "Logged and done" above a
+  rest-day card still offering "Run today instead".
+- **Streak counters invent history** from days that were never logged, and
+  "money not spent" scales with how often you log rather than with time.
+- **The measurements form breaks its layout at phone width**, and a bare
+  em-dash renders on the calendar backfill form.
+- **Refreshing mid-run loses the timer**, though the session itself now
+  survives — you return to the warm-up with the run already recorded.
+
+### Plan
+- **A block never reaches its own goal** before offering the next distance up.
+- **A plan started mid-week uses a Thu–Wed week** while the whole UI shows
+  Mon–Sun.
+- **Accepting a repeat cancels the extra strength work** it just recommended.
+
 ## Operating notes
 
 - **Google OAuth** needs `https://goodform.visharka.us/api/auth/callback/google`
