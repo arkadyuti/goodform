@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { and, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
+  addDays,
+  startOfWeek,
   GOALS,
   STOP_REASONS,
   daysBetween,
@@ -239,7 +241,26 @@ export const planRoutes = new Hono<AppEnv>()
     const repeatsBefore =
       current.weeks.filter((w) => w.index < week.index).reduce((sum, w) => sum + w.repeats, 0) +
       week.repeats;
-    const { from, to } = weekRange(current.plan.startDate, week.index, repeatsBefore);
+    const planned = weekRange(current.plan.startDate, week.index, repeatsBefore);
+
+    /**
+     * Judge the week the runner is actually in.
+     *
+     * The window is anchored to the plan's start date and only moves when a
+     * gate decision is tapped — so someone who trains but never taps one has
+     * the gate grading a window weeks in the past, finding nothing in it, and
+     * reporting that they missed everything. Their whole week of work sat
+     * invisible to the one thing that reads it. When the plan has fallen
+     * behind the calendar, the current calendar week is the honest window;
+     * `behindByWeeks` tells the client to say so rather than accuse.
+     */
+    const todayForGate = await todayFrom(c);
+    const behindByWeeks =
+      planned.to < todayForGate ? Math.floor(daysBetween(planned.to, todayForGate) / 7) : 0;
+    const { from, to } =
+      behindByWeeks > 0
+        ? { from: startOfWeek(todayForGate), to: addDays(startOfWeek(todayForGate), 6) }
+        : planned;
 
     const rows = await db
       .select()
@@ -272,6 +293,9 @@ export const planRoutes = new Hono<AppEnv>()
       range: { from, to },
       weekOver: today > to,
       daysLeft: Math.max(0, daysBetween(today, to)),
+      /** Weeks the plan has fallen behind the calendar, 0 when it is current. */
+      behindByWeeks,
+      plannedRange: planned,
       sessions: rows.map(toSession),
     });
   })

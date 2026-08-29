@@ -924,6 +924,13 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
             ? 'Worth easing off'
             : 'End of week'}
       </Eyebrow>
+      {data.behindByWeeks > 0 && (
+        <p className="mt-1.5 leading-snug text-ink-soft">
+          Your plan is still on week {data.week.index}, {data.behindByWeeks}{' '}
+          {data.behindByWeeks === 1 ? 'week' : 'weeks'} behind the calendar — it only moves when you
+          decide what happens next. This is about the week you have just had.
+        </p>
+      )}
       <p className="mt-1.5 leading-snug">{gate.reason}</p>
       <div className="mt-3.5 flex flex-wrap gap-2">
         {gate.decision === 'pause_medical' ? (

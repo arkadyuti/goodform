@@ -199,6 +199,8 @@ export function useWeekReview(enabled = true) {
         /** False mid-week, when an attendance verdict would be premature. */
         weekOver: boolean;
         daysLeft: number;
+        /** Weeks the plan has fallen behind the calendar; 0 when current. */
+        behindByWeeks: number;
         sessions: unknown[];
       }>(`/plan/week-review?date=${today()}`),
     enabled,

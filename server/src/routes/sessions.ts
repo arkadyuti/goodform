@@ -114,9 +114,7 @@ export const sessionRoutes = new Hono<AppEnv>()
     const [before] = await db
       .select({ completion: schema.workoutSessions.completion })
       .from(schema.workoutSessions)
-      .where(
-        and(eq(schema.workoutSessions.userId, userId), eq(schema.workoutSessions.id, s.id)),
-      );
+      .where(and(eq(schema.workoutSessions.userId, userId), eq(schema.workoutSessions.id, s.id)));
 
     const [written] = await db
       .insert(schema.workoutSessions)
@@ -171,12 +169,34 @@ export const sessionRoutes = new Hono<AppEnv>()
     return c.json({ ok: true });
   })
 
+  /**
+   * How many completed sessions each exercise has behind it.
+   *
+   * Counted from the sessions themselves rather than read from a running
+   * total. The counter it replaces was incremented on write and decremented
+   * nowhere: deleting a mislogged session left it behind for ever, and because
+   * `progressReps` reads it, the app went on prescribing extra reps for work
+   * that had been removed. A count of what is actually there cannot drift.
+   */
   .get('/strength-progress', async (c) => {
     const rows = await db
-      .select()
-      .from(schema.strengthProgress)
-      .where(eq(schema.strengthProgress.userId, c.get('userId')));
-    return c.json({
-      progress: Object.fromEntries(rows.map((r) => [r.exerciseId, r.sessionsCompleted])),
-    });
+      .select({ exerciseLog: schema.workoutSessions.exerciseLog })
+      .from(schema.workoutSessions)
+      .where(
+        and(
+          eq(schema.workoutSessions.userId, c.get('userId')),
+          eq(schema.workoutSessions.type, 'strength'),
+          eq(schema.workoutSessions.completion, 'full'),
+        ),
+      );
+
+    const progress: Record<string, number> = {};
+    for (const row of rows) {
+      const log = row.exerciseLog;
+      if (!log) continue;
+      for (const exerciseId of Object.keys(log)) {
+        progress[exerciseId] = (progress[exerciseId] ?? 0) + 1;
+      }
+    }
+    return c.json({ progress });
   });
