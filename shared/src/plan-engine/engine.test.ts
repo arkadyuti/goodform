@@ -1,10 +1,10 @@
-import type { Equipment } from '../types.js';
+import type { Equipment, InjurySite } from '../types.js';
 import { describe, expect, it } from 'vitest';
 import type { Baseline, PlanWeek, Profile, WorkoutSession } from '../types.js';
 import { MAX_WEEKLY_GROWTH, generatePlan } from './generate.js';
 import { evaluateWeek, returnFromBreak } from './gating.js';
 import { needsFreshBaseline, nextGoalOptions, summariseBlock } from './reassess.js';
-import { buildStrengthSessions, substitute } from './strength.js';
+import { buildStrengthRoutine } from './strength.js';
 import { daysClear } from '../habits.js';
 import { STRENGTH_EXERCISES } from '../content/strength.js';
 
@@ -234,29 +234,31 @@ describe('returnFromBreak', () => {
 
 describe('strength', () => {
   it('substitutes an exercise ruled out by injury history (FR-5.6)', () => {
-    const singleCalf = STRENGTH_EXERCISES.find((e) => e.id === 'calf-raise-single')!;
-    const swapped = substitute(singleCalf, ['achilles']);
-    expect(swapped?.id).toBe('calf-raise-double');
-    expect(substitute(singleCalf, ['knee'])?.id).toBe('calf-raise-single');
+    // The ladder is the substitution now: a bad Achilles drops the calf work
+    // to the hardest stage that is still safe rather than removing it.
+    const calf = (injuryHistory: InjurySite[]) =>
+      buildStrengthRoutine(
+        { equipment: ['none'], injuryHistory },
+        { progress: { 'calf-raise-double': 20 } },
+      ).exercises.find((e) => e.movementId === 'calf');
+    expect(calf(['achilles'])?.id).toBe('calf-raise-double');
+    expect(calf(['knee'])?.id).toBe('calf-raise-single');
   });
 
-  it('builds two sessions that always include the priority work (FR-5.5)', () => {
-    const [a, b] = buildStrengthSessions({ equipment: ['none'], injuryHistory: [] });
-    expect(a!.exercises.some((e) => e.priority)).toBe(true);
-    expect(b!.exercises.some((e) => e.priority)).toBe(true);
-    expect(a!.exercises.length).toBeGreaterThanOrEqual(4);
+  it('builds a routine that always includes the priority work (FR-5.5)', () => {
+    const { exercises } = buildStrengthRoutine({ equipment: ['none'], injuryHistory: [] });
+    expect(exercises.some((e) => e.priority)).toBe(true);
+    expect(exercises.length).toBeGreaterThanOrEqual(4);
   });
 
   it('never prescribes a contraindicated exercise', () => {
-    const sessions = buildStrengthSessions({
+    const { exercises } = buildStrengthRoutine({
       equipment: ['dumbbells'],
       injuryHistory: ['knee', 'achilles'],
     });
-    for (const s of sessions) {
-      for (const e of s.exercises) {
-        expect(e.contraindicatedFor).not.toContain('knee');
-        expect(e.contraindicatedFor).not.toContain('achilles');
-      }
+    for (const e of exercises) {
+      expect(e.contraindicatedFor).not.toContain('knee');
+      expect(e.contraindicatedFor).not.toContain('achilles');
     }
   });
 });
@@ -565,13 +567,8 @@ describe('a week that is still going', () => {
 
 describe('equipment actually changes the strength work', () => {
   const needs = new Map(STRENGTH_EXERCISES.map((e) => [e.id, e.requires ?? []]));
-  const idsFor = (equipment: Equipment[]) => [
-    ...new Set(
-      buildStrengthSessions({ equipment, injuryHistory: [] }).flatMap((s) =>
-        s.exercises.map((e) => e.id),
-      ),
-    ),
-  ];
+  const idsFor = (equipment: Equipment[], progress: Record<string, number> = {}) =>
+    buildStrengthRoutine({ equipment, injuryHistory: [] }, { progress }).exercises.map((e) => e.id);
 
   it('never prescribes something the runner cannot do', () => {
     // The step-down needs a step, and used to be handed to people who had said
@@ -614,9 +611,9 @@ describe('equipment actually changes the strength work', () => {
   it('still covers the quads when there is no step', () => {
     // Dropping the step-down rather than substituting left a session with no
     // quad work in it at all.
-    const targets = buildStrengthSessions({ equipment: ['none'], injuryHistory: [] }).map((s) =>
-      s.exercises.map((e) => e.target).join(' '),
-    );
-    for (const session of targets) expect(session).toMatch(/Quad/i);
+    const targets = buildStrengthRoutine({ equipment: ['none'], injuryHistory: [] })
+      .exercises.map((e) => e.target)
+      .join(' ');
+    expect(targets).toMatch(/Quad/i);
   });
 });

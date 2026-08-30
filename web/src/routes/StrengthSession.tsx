@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { buildStrengthSessions, progressReps } from '@goodform/shared';
+import { buildStrengthRoutine, progressReps } from '@goodform/shared';
 import {
   useSessions,
   useLogSession,
@@ -8,9 +8,8 @@ import {
   useStrengthProgress,
   useWeekReview,
 } from '../api/hooks.ts';
-import { shiftDays, today } from '../lib/date.ts';
+import { today } from '../lib/date.ts';
 import { clearSessionId, sessionIdFor } from '../lib/sessionId.ts';
-import { pickStrengthSlot } from '../lib/strengthSlot.ts';
 import { Button, Card, Eyebrow, Note } from '../components/ui.tsx';
 import { StopRules } from '../components/StopRules.tsx';
 
@@ -25,29 +24,33 @@ export function StrengthSession() {
   // A repeated week comes with extra strength work — that is what makes the
   // repeat useful rather than just a pause (FR-3.2).
   const emphasis = review?.gate.strengthEmphasis ?? false;
-
-  const sessions = useMemo(
-    () =>
-      profile
-        ? buildStrengthSessions(
-            { equipment: profile.equipment, injuryHistory: profile.injuryHistory },
-            { emphasis },
-          )
-        : [],
-    [profile, emphasis],
-  );
+  /**
+   * A week the plan has eased asks for the same movements with a set taken off.
+   * Dropping exercises to make a week lighter is what makes a routine
+   * impossible to learn, and the habit is the point.
+   */
+  const easing = review?.gate.decision === 'ease';
+  const progress = progressData?.progress;
 
   /**
-   * Alternate the two sessions — by what was done, not by the weekday. The
-   * calendar rule pinned anyone whose strength days fell on the same side of
-   * Thursday to a single session for good, so half the library never showed up.
+   * One routine, the same every strength day.
+   *
+   * There used to be two sessions picked apart by `new Date().getDay() >= 4`.
+   * The calendar decided which half of the work you did, so strength days on
+   * the same side of Thursday pinned you to one session for good — and the two
+   * halves alternated the easy and hard version of the same movement anyway.
+   * The ladder each movement sits on is what moves now, not the exercise list.
    */
-  const { data: history } = useSessions(shiftDays(today(), -60));
-  const slot = useMemo(
-    () => pickStrengthSlot(sessions, history?.sessions ?? [], today()),
-    [sessions, history],
+  const routine = useMemo(
+    () =>
+      profile
+        ? buildStrengthRoutine(
+            { equipment: profile.equipment, injuryHistory: profile.injuryHistory },
+            { progress, intensity: emphasis ? 'emphasis' : easing ? 'easy' : 'normal' },
+          )
+        : null,
+    [profile, progress, emphasis, easing],
   );
-  const session = sessions[slot] ?? sessions[0];
   /**
    * Sets already recorded today, read back on mount.
    *
@@ -55,7 +58,8 @@ export function StrengthSession() {
    * so a refresh showed 0 of 12 with six already saved, and ticking again
    * wrote them a second time.
    */
-  const recorded = history?.sessions.find(
+  const { data: todaysSessions } = useSessions(today());
+  const recorded = todaysSessions?.sessions.find(
     (session) => session.type === 'strength' && session.date === today(),
   );
   // Derived rather than hydrated through an effect: until this screen is
@@ -76,7 +80,7 @@ export function StrengthSession() {
    */
   const [sessionId] = useState(() => sessionIdFor(today(), 'strength'));
 
-  if (!profile || !session) {
+  if (!profile || !routine) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10">
         <Note>Finish your profile and GoodForm will build your strength work.</Note>
@@ -84,7 +88,7 @@ export function StrengthSession() {
     );
   }
 
-  const totalSets = session.exercises.reduce((sum, e) => sum + e.sets, 0);
+  const totalSets = routine.exercises.reduce((sum, e) => sum + e.sets, 0);
   const doneSets = Object.values(setsDone).reduce((sum, n) => sum + n, 0);
 
   /** What the session looks like given a set of ticks. */
@@ -136,7 +140,7 @@ export function StrengthSession() {
       }}
     >
       <div className="flex items-center justify-between">
-        <Eyebrow>Strength · session {session.slot}</Eyebrow>
+        <Eyebrow>Strength</Eyebrow>
         <button
           onClick={() => navigate('/')}
           className="tap px-2 text-[0.875rem] text-ink-faint hover:text-ink"
@@ -159,6 +163,13 @@ export function StrengthSession() {
         </Note>
       )}
 
+      {easing && (
+        <Note>
+          Same exercises, one set fewer. An easier week is a lighter version of the routine, not a
+          different one.
+        </Note>
+      )}
+
       <div className="mt-4 flex items-center gap-3">
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-chalk-deep">
           <div
@@ -172,7 +183,7 @@ export function StrengthSession() {
       </div>
 
       <ul className="mt-4 flex flex-col gap-3">
-        {session.exercises.map((exercise) => {
+        {routine.exercises.map((exercise) => {
           const done = setsDone[exercise.id] ?? 0;
           const completedBefore = progressData?.progress[exercise.id] ?? 0;
           const reps = progressReps(exercise.reps, completedBefore);
@@ -189,7 +200,17 @@ export function StrengthSession() {
                         </span>
                       )}
                     </p>
-                    <p className="text-[0.8125rem] text-ink-faint">{exercise.target}</p>
+                    <p className="text-[0.8125rem] text-ink-faint">
+                      {exercise.target}
+                      {exercise.stages > 1 && (
+                        <>
+                          {' · '}
+                          <span className="tabular">
+                            stage {exercise.stage} of {exercise.stages}
+                          </span>
+                        </>
+                      )}
+                    </p>
                   </div>
                   {exercise.priority && (
                     <span className="shrink-0 rounded-md bg-run-wash px-2 py-0.5 text-[0.6875rem] font-semibold tracking-wide text-run-deep uppercase">
@@ -203,7 +224,9 @@ export function StrengthSession() {
                     <span className="tabular font-semibold">{exercise.sets}</span> sets
                   </span>
                   <span>
-                    <span className="tabular font-semibold">{reps}</span> reps
+                    <span className="tabular font-semibold">{reps}</span>
+                    {/* A dead hang is prescribed in seconds — "30 seconds reps" is not English. */}
+                    {!/second/i.test(reps) && ' reps'}
                     {reps !== exercise.reps && (
                       <span className="ml-1 text-[0.75rem] text-good">progressed</span>
                     )}

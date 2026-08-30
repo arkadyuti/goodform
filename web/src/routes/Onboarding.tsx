@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Profile, ScreeningFlag, StopReason } from '@goodform/shared';
 import {
-  buildStrengthSessions,
+  buildStrengthRoutine,
   daysFor,
   listDays,
   proteinTarget,
@@ -885,8 +885,8 @@ function UnlockedByEquipment({ equipment }: { equipment: Equipment[] }) {
   const { unlocked, base } = useMemo(() => {
     const idsFor = (kit: Equipment[]) =>
       new Set(
-        buildStrengthSessions({ equipment: kit, injuryHistory: [] }).flatMap((session) =>
-          session.exercises.map((exercise) => exercise.name),
+        buildStrengthRoutine({ equipment: kit, injuryHistory: [] }).exercises.map(
+          (exercise) => exercise.name,
         ),
       );
     const withNothing = idsFor(['none']);

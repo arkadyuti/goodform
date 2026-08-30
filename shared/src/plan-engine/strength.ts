@@ -1,91 +1,109 @@
-import { needsEquipment, STRENGTH_EXERCISES } from '../content/strength.js';
-import type { Equipment, InjurySite, Profile, StrengthExercise } from '../types.js';
+import { STRENGTH_EXERCISES } from '../content/strength.js';
+import { MOVEMENTS, type Movement } from '../content/movements.js';
+import type { Equipment, Profile, StrengthExercise } from '../types.js';
 
 const byId = new Map(STRENGTH_EXERCISES.map((e) => [e.id, e]));
 
-/**
- * FR-5.6: an exercise ruled out by injury history is replaced, not dropped.
- * Returns null only if the substitute is itself ruled out.
- */
-export function substitute(
-  exercise: StrengthExercise,
-  injuries: InjurySite[],
-): StrengthExercise | null {
-  const blocked = exercise.contraindicatedFor.some((site) => injuries.includes(site));
-  if (!blocked) return exercise;
-  const alt = exercise.substituteId ? byId.get(exercise.substituteId) : undefined;
-  if (!alt) return null;
-  if (alt.contraindicatedFor.some((site) => injuries.includes(site))) return null;
-  return alt;
+function owns(exercise: StrengthExercise, equipment: Equipment[]): boolean {
+  return !exercise.requires?.length || exercise.requires.some((item) => equipment.includes(item));
+}
+
+/** How many full sessions this movement has been completed, at any stage. */
+function completedFor(movement: Movement, progress: Record<string, number>): number {
+  return movement.stages.reduce((total, stage) => total + (progress[stage.id] ?? 0), 0);
 }
 
 /**
- * Swaps in an alternative when the runner does not own what an exercise needs.
- *
- * The same courtesy the injury path already gets: a step-down is priority work
- * for the quads, and simply dropping it for anyone without a step left them
- * with no quad work at all. A wall sit needs a wall.
+ * The stage of a ladder a runner is on: the hardest one they own the kit for,
+ * have earned, and are not injured out of.
  */
-export function forEquipment(
-  exercise: StrengthExercise,
-  equipment: Equipment[],
-): StrengthExercise | null {
-  const have = (e: StrengthExercise) =>
-    !e.requires?.length || e.requires.some((item) => equipment.includes(item));
-  if (have(exercise)) return exercise;
-  const alt = exercise.substituteId ? byId.get(exercise.substituteId) : undefined;
-  if (!alt || !have(alt)) return null;
-  // The substitute inherits the role it is standing in for.
-  return { ...alt, priority: exercise.priority };
-}
-
-export interface StrengthSession {
-  /** 1 or 2 — the two weekly sessions rotate emphasis. */
-  slot: 1 | 2;
-  exercises: StrengthExercise[];
-}
-
-/**
- * FR-5.3: two sessions a week on non-running days, built from the runner's
- * equipment and filtered through their injury history.
- */
-export function buildStrengthSessions(
+export function stageFor(
+  movement: Movement,
   profile: Pick<Profile, 'equipment' | 'injuryHistory'>,
-  opts: { emphasis?: boolean } = {},
-): StrengthSession[] {
-  const pool = STRENGTH_EXERCISES.map((e) => forEquipment(e, profile.equipment))
-    .filter((e): e is StrengthExercise => e !== null)
-    .map((e) => substitute(e, profile.injuryHistory))
-    .filter((e): e is StrengthExercise => e !== null);
+  completed: number,
+): StrengthExercise | null {
+  let chosen: StrengthExercise | null = null;
+  for (const stage of movement.stages) {
+    const exercise = byId.get(stage.id);
+    if (!exercise) continue;
+    if (stage.unlockAfter > completed) continue;
+    if (!owns(exercise, profile.equipment)) continue;
+    if (exercise.contraindicatedFor.some((site) => profile.injuryHistory.includes(site))) continue;
+    chosen = exercise;
+  }
+  return chosen;
+}
 
-  const seen = new Set<string>();
-  const unique = pool.filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)));
+/** How hard the week is asking, not which exercises it asks for. */
+export type Intensity = 'easy' | 'normal' | 'emphasis';
 
-  const priority = unique.filter((e) => e.priority);
+export interface RoutineExercise extends StrengthExercise {
+  /** The pattern this is a variant of — stable while the variant changes. */
+  movementId: string;
+  movementName: string;
+  /** 1-based position on the ladder, and how long the ladder is. */
+  stage: number;
+  stages: number;
+}
 
-  /**
-   * Equipment-specific work first among the optional exercises.
-   *
-   * The remainder is sliced down to two per session, and the exercises a piece
-   * of equipment unlocks happened to sit at the end of the library — so
-   * answering "I have a pull-up bar" unlocked a dead hang and a hanging knee
-   * raise and then cut both, giving the identical session to someone who owns
-   * nothing. If a runner went and found the thing, it should show up in what
-   * they are asked to do.
-   */
-  const rest = unique
-    .filter((e) => !e.priority)
-    .sort((a, b) => Number(needsEquipment(b)) - Number(needsEquipment(a)));
+export interface StrengthRoutine {
+  exercises: RoutineExercise[];
+  intensity: Intensity;
+}
 
-  // Priority work appears in both sessions; the remainder splits between them.
-  const size = opts.emphasis ? 3 : 2;
-  const sessionA = [...priority, ...rest.filter((_, i) => i % 2 === 0).slice(0, size)];
-  const sessionB = [...priority, ...rest.filter((_, i) => i % 2 === 1).slice(0, size)];
+/**
+ * FR-5.3: the strength work for a session.
+ *
+ * One routine, the same every strength day. A week that needs to be lighter
+ * drops a set rather than dropping exercises — the movement pattern is the
+ * habit, and taking it away to make a week easier is what makes a routine
+ * impossible to learn. See `MOVEMENTS` for why this replaced two alternating
+ * sessions.
+ */
+export function buildStrengthRoutine(
+  profile: Pick<Profile, 'equipment' | 'injuryHistory'>,
+  opts: { progress?: Record<string, number>; intensity?: Intensity } = {},
+): StrengthRoutine {
+  const progress = opts.progress ?? {};
+  const intensity = opts.intensity ?? 'normal';
 
-  return [
-    { slot: 1, exercises: sessionA },
-    { slot: 2, exercises: sessionB },
-  ];
+  const exercises: RoutineExercise[] = [];
+  for (const movement of MOVEMENTS) {
+    const completed = completedFor(movement, progress);
+    const exercise = stageFor(movement, profile, completed);
+    if (!exercise) continue;
+
+    // Only the stages they could actually reach count towards "stage 2 of 3".
+    const reachable = movement.stages.filter((stage) => {
+      const candidate = byId.get(stage.id);
+      return (
+        candidate &&
+        owns(candidate, profile.equipment) &&
+        !candidate.contraindicatedFor.some((site) => profile.injuryHistory.includes(site))
+      );
+    });
+
+    exercises.push({
+      ...exercise,
+      priority: movement.priority,
+      sets: setsFor(exercise.sets, movement.priority, intensity),
+      movementId: movement.id,
+      movementName: movement.name,
+      stage: reachable.findIndex((stage) => stage.id === exercise.id) + 1,
+      stages: reachable.length,
+    });
+  }
+
+  // Priority work first, so a runner short on time does the part that matters.
+  exercises.sort((a, b) => Number(b.priority) - Number(a.priority));
+
+  return { exercises, intensity };
+}
+
+function setsFor(sets: number, priority: boolean, intensity: Intensity): number {
+  if (intensity === 'easy') return Math.max(2, sets - 1);
+  if (intensity === 'emphasis' && priority) return sets + 1;
+  return sets;
 }
 
 /** FR-5.7: reps advance once a session is completed in full at the current prescription. */

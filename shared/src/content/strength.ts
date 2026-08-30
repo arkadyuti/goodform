@@ -1,4 +1,4 @@
-import type { Equipment, EquipmentTier, StrengthExercise } from '../types.js';
+import type { StrengthExercise } from '../types.js';
 
 /**
  * FR-5.1: the work that decides whether a beginner is still running in six
@@ -278,33 +278,3 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     substituteId: 'step-down',
   },
 ];
-
-/** FR-5.2: which tier a runner's equipment unlocks. */
-export function tierFor(equipment: Equipment[]): EquipmentTier {
-  if (equipment.includes('dumbbells') || equipment.includes('resistance_bands')) return 'loaded';
-  if (equipment.includes('pull_up_bar')) return 'bar';
-  return 'bodyweight';
-}
-
-const TIER_INCLUDES: Record<EquipmentTier, EquipmentTier[]> = {
-  bodyweight: ['bodyweight'],
-  bar: ['bodyweight', 'bar'],
-  loaded: ['bodyweight', 'bar', 'loaded'],
-};
-
-export function exercisesForTier(tier: EquipmentTier): StrengthExercise[] {
-  const allowed = TIER_INCLUDES[tier];
-  return STRENGTH_EXERCISES.filter((e) => allowed.includes(e.tier));
-}
-
-/** Everything the runner can actually do with what they say they own. */
-export function exercisesFor(equipment: Equipment[]): StrengthExercise[] {
-  return STRENGTH_EXERCISES.filter(
-    (e) => !e.requires?.length || e.requires.some((item) => equipment.includes(item)),
-  );
-}
-
-/** True when this exercise is only possible because of something they own. */
-export function needsEquipment(exercise: StrengthExercise): boolean {
-  return Boolean(exercise.requires?.length);
-}
