@@ -8,8 +8,9 @@ import {
   useStrengthProgress,
   useWeekReview,
 } from '../api/hooks.ts';
-import { today } from '../lib/date.ts';
+import { shiftDays, today } from '../lib/date.ts';
 import { clearSessionId, sessionIdFor } from '../lib/sessionId.ts';
+import { pickStrengthSlot } from '../lib/strengthSlot.ts';
 import { Button, Card, Eyebrow, Note } from '../components/ui.tsx';
 import { StopRules } from '../components/StopRules.tsx';
 
@@ -36,8 +37,16 @@ export function StrengthSession() {
     [profile, emphasis],
   );
 
-  // Alternate the two sessions across the week.
-  const slot = new Date().getDay() >= 4 ? 1 : 0;
+  /**
+   * Alternate the two sessions — by what was done, not by the weekday. The
+   * calendar rule pinned anyone whose strength days fell on the same side of
+   * Thursday to a single session for good, so half the library never showed up.
+   */
+  const { data: history } = useSessions(shiftDays(today(), -60));
+  const slot = useMemo(
+    () => pickStrengthSlot(sessions, history?.sessions ?? [], today()),
+    [sessions, history],
+  );
   const session = sessions[slot] ?? sessions[0];
   /**
    * Sets already recorded today, read back on mount.
@@ -46,8 +55,7 @@ export function StrengthSession() {
    * so a refresh showed 0 of 12 with six already saved, and ticking again
    * wrote them a second time.
    */
-  const { data: todaysSessions } = useSessions(today());
-  const recorded = todaysSessions?.sessions.find(
+  const recorded = history?.sessions.find(
     (session) => session.type === 'strength' && session.date === today(),
   );
   // Derived rather than hydrated through an effect: until this screen is
