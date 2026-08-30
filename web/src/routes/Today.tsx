@@ -31,7 +31,7 @@ import {
   useReturnFromBreak,
   useWeekReview,
 } from '../api/hooks.ts';
-import { dayName, scheduleFor, shiftDays, today } from '../lib/date.ts';
+import { dayName, scheduleFor, shiftDays, today, type ScheduledDay } from '../lib/date.ts';
 import { Button, Card, Choices, Eyebrow, LoadFailed, Note, Stepper } from '../components/ui.tsx';
 import { DueNow } from '../components/DueNow.tsx';
 import { Fuelling } from '../components/Fuelling.tsx';
@@ -241,19 +241,6 @@ export function Today() {
         a run could not be started on a strength day at all. The plan advises;
         it does not lock the door.
       */}
-      {ready && scheduled !== 'rest' && plan?.status === 'active' && (
-        <Button
-          variant="quiet"
-          full
-          className="py-3"
-          onClick={() => navigate(scheduled === 'run' ? '/session/strength' : '/session/run')}
-        >
-          {scheduled === 'run'
-            ? 'Do the strength session instead'
-            : "Run instead — it's a strength day"}
-        </Button>
-      )}
-
       {ready &&
         scheduled !== 'rest' &&
         plan?.status === 'active' &&
@@ -270,11 +257,15 @@ export function Today() {
       {ready && <DueNow />}
 
       {ready && scheduled === 'rest' && (
-        <RestDay
-          hasPlan={plan?.status === 'active'}
+        <RestDay sessions={sessionData?.sessions ?? []} days={trainingDays} />
+      )}
+
+      {ready && plan?.status === 'active' && (
+        <SomethingElse
+          scheduled={scheduled}
           sessions={sessionData?.sessions ?? []}
           onRun={() => navigate('/session/run')}
-          days={trainingDays}
+          onStrength={() => navigate('/session/strength')}
         />
       )}
 
@@ -660,32 +651,101 @@ function ProteinDial({ value, target }: { value: number; target: number }) {
  * The warning is specific rather than generic: what actually hurts beginners is
  * running on consecutive days and adding volume, not the day's name.
  */
-function RestDay({
-  hasPlan,
-  sessions,
-  onRun,
-  days,
-}: {
-  hasPlan: boolean;
-  sessions: SessionRow[];
-  onRun: () => void;
-  days: TrainingDays;
-}) {
-  const [asking, setAsking] = useState(false);
-  const date = today();
-
+/**
+ * Why running today might not be the best idea — or null when it is fine.
+ *
+ * Only running carries this. Strength work is not the load that hurts
+ * beginners, so it is never gated: the point of the whole screen below is that
+ * the plan advises and the runner decides.
+ */
+function runCautionFor(sessions: SessionRow[], date: string): string | null {
   const runs = sessions.filter(
     (s) => (s.type === 'run' || s.type === 'baseline') && s.completion !== 'skipped',
   );
-  const ranYesterday = runs.some((s) => s.date === shiftDays(date, -1));
+  if (runs.some((s) => s.date === shiftDays(date, -1))) {
+    return 'You ran yesterday. Back-to-back running days are where beginners actually get hurt — the load lands on tissue that has not finished repairing from the last one.';
+  }
   const weekStart = startOfWeek(date);
-  const runsThisWeek = runs.filter((s) => s.date >= weekStart && s.date <= date).length;
+  if (runs.filter((s) => s.date >= weekStart && s.date <= date).length >= 3) {
+    return 'That would be your fourth run this week. Weekly running time is meant to grow by no more than a tenth, and a fourth session is a much bigger jump than that.';
+  }
+  return null;
+}
 
-  const caution = ranYesterday
-    ? 'You ran yesterday. Back-to-back running days are where beginners actually get hurt — the load lands on tissue that has not finished repairing from the last one.'
-    : runsThisWeek >= 3
-      ? `That would be your fourth run this week. Weekly running time is meant to grow by no more than a tenth, and a fourth session is a much bigger jump than that.`
-      : 'Fine — a rest day moved is not a rest day skipped. Try to keep a clear day either side of it.';
+/**
+ * Do something other than what today asked for.
+ *
+ * The plan lays out a week; it does not know that it is raining, that the park
+ * is shut, or that you have forty minutes and a floor. Every session type is
+ * reachable on every day — including a rest day, where strength work was
+ * previously not offered at all and running was the only alternative on the
+ * screen. Nothing here asks for a reason.
+ */
+function SomethingElse({
+  scheduled,
+  sessions,
+  onRun,
+  onStrength,
+}: {
+  scheduled: ScheduledDay;
+  sessions: SessionRow[];
+  onRun: () => void;
+  onStrength: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  const caution = runCautionFor(sessions, today());
+
+  const offerRun = scheduled !== 'run';
+  const offerStrength = scheduled !== 'strength';
+  if (!offerRun && !offerStrength) return null;
+
+  if (asking && caution) {
+    return (
+      <Card>
+        <Eyebrow as="h2">Before you do</Eyebrow>
+        <div className="mt-2">
+          <Note tone="alert">{caution}</Note>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button onClick={onRun}>Run anyway</Button>
+          <Button variant="quiet" onClick={() => setAsking(false)}>
+            Leave it
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <Eyebrow as="h2">Something else today</Eyebrow>
+      <p className="mt-1.5 leading-snug text-ink-soft">
+        {scheduled === 'rest'
+          ? 'Nothing is asked of you today, but the door is open.'
+          : 'Raining, gym shut, wrong shoes — the plan is a suggestion, not a rota.'}
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2.5">
+        {offerStrength && (
+          <Button variant="secondary" onClick={onStrength}>
+            Do the strength session
+          </Button>
+        )}
+        {offerRun && (
+          <Button variant="secondary" onClick={() => (caution ? setAsking(true) : onRun())}>
+            Go for a run
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** What a rest day says. Choosing to do something anyway lives in `SomethingElse`. */
+function RestDay({ sessions, days }: { sessions: SessionRow[]; days: TrainingDays }) {
+  const date = today();
+  const runs = sessions.filter(
+    (s) => (s.type === 'run' || s.type === 'baseline') && s.completion !== 'skipped',
+  );
 
   // Two days in seven, a brand new plan lands here first. "Adaptation happens
   // now" is true of a rest day between sessions and nonsense on day zero — you
@@ -707,23 +767,6 @@ function RestDay({
           'Nothing scheduled. Adaptation happens now, not during the run.'
         )}
       </p>
-
-      {hasPlan &&
-        (asking ? (
-          <div className="mt-3">
-            <Note tone={ranYesterday || runsThisWeek >= 3 ? 'alert' : 'neutral'}>{caution}</Note>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button onClick={onRun}>Run it anyway</Button>
-              <Button variant="quiet" onClick={() => setAsking(false)}>
-                Leave it
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button variant="secondary" className="mt-3" onClick={() => setAsking(true)}>
-            Run today instead
-          </Button>
-        ))}
 
       <Link to="/plan" className="mt-3 block text-[0.875rem] text-run underline underline-offset-4">
         {nothingLoggedYet ? 'See week one' : 'See the week ahead'}
