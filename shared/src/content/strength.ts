@@ -16,7 +16,10 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     tempo: '2s up, 3s down',
     perSide: false,
     priority: true,
-    cues: ['Full height at the top, full stretch at the bottom.', 'The slow lowering is the part that builds tendon.'],
+    cues: [
+      'Full height at the top, full stretch at the bottom.',
+      'The slow lowering is the part that builds tendon.',
+    ],
     contraindicatedFor: [],
   },
   {
@@ -29,7 +32,10 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     tempo: '2s up, 3s down',
     perSide: true,
     priority: true,
-    cues: ['Fingertips on a wall for balance only.', 'Stop the set when the height drops, not when it burns.'],
+    cues: [
+      'Fingertips on a wall for balance only.',
+      'Stop the set when the height drops, not when it burns.',
+    ],
     contraindicatedFor: ['achilles'],
     substituteId: 'calf-raise-double',
   },
@@ -43,7 +49,10 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     tempo: '1s up, 2s down',
     perSide: false,
     priority: true,
-    cues: ['Heels against a wall, lift the toes as high as they go.', 'The single best defence against shin splints.'],
+    cues: [
+      'Heels against a wall, lift the toes as high as they go.',
+      'The single best defence against shin splints.',
+    ],
     contraindicatedFor: [],
   },
   {
@@ -56,7 +65,10 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     tempo: '1s up, 1s hold, 2s down',
     perSide: false,
     priority: false,
-    cues: ['Drive through the heels.', 'Ribs down — the movement comes from the hips, not the lower back.'],
+    cues: [
+      'Drive through the heels.',
+      'Ribs down — the movement comes from the hips, not the lower back.',
+    ],
     contraindicatedFor: [],
   },
   {
@@ -77,13 +89,17 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'step-down',
     name: 'Step-down',
     tier: 'bodyweight',
+    requires: ['step'],
     target: 'Quads + knee control',
     sets: 3,
     reps: '8–10',
     tempo: '3s down, 1s up',
     perSide: true,
     priority: true,
-    cues: ['Lower until the heel taps, then stand back up.', 'Watch the knee: it should not fall inwards.'],
+    cues: [
+      'Lower until the heel taps, then stand back up.',
+      'Watch the knee: it should not fall inwards.',
+    ],
     contraindicatedFor: ['knee'],
     substituteId: 'wall-sit',
   },
@@ -97,7 +113,10 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     tempo: 'hold',
     perSide: false,
     priority: false,
-    cues: ['Thighs as close to parallel as is comfortable.', 'Knee-friendly alternative when bending under load hurts.'],
+    cues: [
+      'Thighs as close to parallel as is comfortable.',
+      'Knee-friendly alternative when bending under load hurts.',
+    ],
     contraindicatedFor: [],
   },
   {
@@ -110,7 +129,10 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     tempo: '2s up, 2s down',
     perSide: true,
     priority: false,
-    cues: ['Lead with the heel, toes pointed slightly down.', 'Stops the hip dropping on every stride.'],
+    cues: [
+      'Lead with the heel, toes pointed slightly down.',
+      'Stops the hip dropping on every stride.',
+    ],
     contraindicatedFor: [],
   },
   {
@@ -145,6 +167,7 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'hanging-knee-raise',
     name: 'Hanging knee raise',
     tier: 'bar',
+    requires: ['pull_up_bar'],
     target: 'Trunk + hip flexors',
     sets: 3,
     reps: '8–12',
@@ -159,6 +182,7 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'dead-hang',
     name: 'Dead hang',
     tier: 'bar',
+    requires: ['pull_up_bar'],
     target: 'Grip + shoulders + spine decompression',
     sets: 3,
     reps: '20–40 seconds',
@@ -174,13 +198,17 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'goblet-squat',
     name: 'Goblet squat',
     tier: 'loaded',
+    requires: ['dumbbells'],
     target: 'Quads + glutes',
     sets: 3,
     reps: '10–12',
     tempo: '3s down, 1s up',
     perSide: false,
     priority: false,
-    cues: ['Weight at the chest, elbows inside the knees.', 'Depth you can control beats depth you cannot.'],
+    cues: [
+      'Weight at the chest, elbows inside the knees.',
+      'Depth you can control beats depth you cannot.',
+    ],
     contraindicatedFor: ['knee'],
     substituteId: 'wall-sit',
   },
@@ -188,13 +216,17 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'romanian-deadlift',
     name: 'Romanian deadlift',
     tier: 'loaded',
+    requires: ['dumbbells', 'resistance_bands'],
     target: 'Hamstrings + glutes',
     sets: 3,
     reps: '10',
     tempo: '3s down, 1s up',
     perSide: false,
     priority: true,
-    cues: ['Hinge at the hips, flat back, soft knees.', 'Feel it in the hamstrings, never the lower back.'],
+    cues: [
+      'Hinge at the hips, flat back, soft knees.',
+      'Feel it in the hamstrings, never the lower back.',
+    ],
     contraindicatedFor: ['back'],
     substituteId: 'single-leg-bridge',
   },
@@ -202,13 +234,17 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'loaded-calf-raise',
     name: 'Weighted single-leg calf raise',
     tier: 'loaded',
+    requires: ['dumbbells', 'resistance_bands'],
     target: 'Calf + Achilles under load',
     sets: 3,
     reps: '8–10',
     tempo: '2s up, 4s down',
     perSide: true,
     priority: true,
-    cues: ['Off a step for full range if you have one.', 'Four seconds down. Count it out loud if you have to.'],
+    cues: [
+      'Off a step for full range if you have one.',
+      'Four seconds down. Count it out loud if you have to.',
+    ],
     contraindicatedFor: ['achilles'],
     substituteId: 'calf-raise-double',
   },
@@ -216,6 +252,7 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'banded-clamshell',
     name: 'Banded clamshell',
     tier: 'loaded',
+    requires: ['resistance_bands'],
     target: 'Glute medius',
     sets: 3,
     reps: '15',
@@ -229,6 +266,7 @@ export const STRENGTH_EXERCISES: StrengthExercise[] = [
     id: 'split-squat',
     name: 'Dumbbell split squat',
     tier: 'loaded',
+    requires: ['dumbbells', 'resistance_bands'],
     target: 'Single-leg strength',
     sets: 3,
     reps: '8–10',
@@ -257,4 +295,16 @@ const TIER_INCLUDES: Record<EquipmentTier, EquipmentTier[]> = {
 export function exercisesForTier(tier: EquipmentTier): StrengthExercise[] {
   const allowed = TIER_INCLUDES[tier];
   return STRENGTH_EXERCISES.filter((e) => allowed.includes(e.tier));
+}
+
+/** Everything the runner can actually do with what they say they own. */
+export function exercisesFor(equipment: Equipment[]): StrengthExercise[] {
+  return STRENGTH_EXERCISES.filter(
+    (e) => !e.requires?.length || e.requires.some((item) => equipment.includes(item)),
+  );
+}
+
+/** True when this exercise is only possible because of something they own. */
+export function needsEquipment(exercise: StrengthExercise): boolean {
+  return Boolean(exercise.requires?.length);
 }

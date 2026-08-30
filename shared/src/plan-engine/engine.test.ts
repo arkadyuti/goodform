@@ -1,3 +1,4 @@
+import type { Equipment } from '../types.js';
 import { describe, expect, it } from 'vitest';
 import type { Baseline, PlanWeek, Profile, WorkoutSession } from '../types.js';
 import { MAX_WEEKLY_GROWTH, generatePlan } from './generate.js';
@@ -559,5 +560,63 @@ describe('a week that is still going', () => {
     const over = evaluateWeek(week, [done], 0, true);
     expect(over.decision).toBe('step_back');
     expect(over.reason).toContain('missed');
+  });
+});
+
+describe('equipment actually changes the strength work', () => {
+  const needs = new Map(STRENGTH_EXERCISES.map((e) => [e.id, e.requires ?? []]));
+  const idsFor = (equipment: Equipment[]) => [
+    ...new Set(
+      buildStrengthSessions({ equipment, injuryHistory: [] }).flatMap((s) =>
+        s.exercises.map((e) => e.id),
+      ),
+    ),
+  ];
+
+  it('never prescribes something the runner cannot do', () => {
+    // The step-down needs a step, and used to be handed to people who had said
+    // they owned nothing at all.
+    for (const equipment of [['none'], ['step'], ['pull_up_bar'], ['dumbbells']] as Equipment[][]) {
+      for (const id of idsFor(equipment)) {
+        const required = needs.get(id) ?? [];
+        if (!required.length) continue;
+        expect(
+          required.some((item) => equipment.includes(item)),
+          `${id} prescribed to ${equipment.join('+')}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('uses what the runner says they own', () => {
+    // Answering "I have a pull-up bar" used to unlock two exercises and then
+    // cut both, giving the identical session to someone who owns nothing.
+    const bar = idsFor(['pull_up_bar']);
+    expect(bar).toContain('hanging-knee-raise');
+    expect(idsFor(['step'])).toContain('step-down');
+    expect(idsFor(['dumbbells']).some((id) => (needs.get(id) ?? []).includes('dumbbells'))).toBe(
+      true,
+    );
+  });
+
+  it('gives a different session to someone who owns something', () => {
+    const nothing = idsFor(['none']).join(',');
+    for (const equipment of [
+      ['step'],
+      ['pull_up_bar'],
+      ['dumbbells'],
+      ['resistance_bands'],
+    ] as Equipment[][]) {
+      expect(idsFor(equipment).join(','), equipment.join('+')).not.toBe(nothing);
+    }
+  });
+
+  it('still covers the quads when there is no step', () => {
+    // Dropping the step-down rather than substituting left a session with no
+    // quad work in it at all.
+    const targets = buildStrengthSessions({ equipment: ['none'], injuryHistory: [] }).map((s) =>
+      s.exercises.map((e) => e.target).join(' '),
+    );
+    for (const session of targets) expect(session).toMatch(/Quad/i);
   });
 });

@@ -1,5 +1,5 @@
-import { exercisesForTier, STRENGTH_EXERCISES, tierFor } from '../content/strength.js';
-import type { InjurySite, Profile, StrengthExercise } from '../types.js';
+import { needsEquipment, STRENGTH_EXERCISES } from '../content/strength.js';
+import type { Equipment, InjurySite, Profile, StrengthExercise } from '../types.js';
 
 const byId = new Map(STRENGTH_EXERCISES.map((e) => [e.id, e]));
 
@@ -19,6 +19,26 @@ export function substitute(
   return alt;
 }
 
+/**
+ * Swaps in an alternative when the runner does not own what an exercise needs.
+ *
+ * The same courtesy the injury path already gets: a step-down is priority work
+ * for the quads, and simply dropping it for anyone without a step left them
+ * with no quad work at all. A wall sit needs a wall.
+ */
+export function forEquipment(
+  exercise: StrengthExercise,
+  equipment: Equipment[],
+): StrengthExercise | null {
+  const have = (e: StrengthExercise) =>
+    !e.requires?.length || e.requires.some((item) => equipment.includes(item));
+  if (have(exercise)) return exercise;
+  const alt = exercise.substituteId ? byId.get(exercise.substituteId) : undefined;
+  if (!alt || !have(alt)) return null;
+  // The substitute inherits the role it is standing in for.
+  return { ...alt, priority: exercise.priority };
+}
+
 export interface StrengthSession {
   /** 1 or 2 — the two weekly sessions rotate emphasis. */
   slot: 1 | 2;
@@ -33,7 +53,8 @@ export function buildStrengthSessions(
   profile: Pick<Profile, 'equipment' | 'injuryHistory'>,
   opts: { emphasis?: boolean } = {},
 ): StrengthSession[] {
-  const pool = exercisesForTier(tierFor(profile.equipment))
+  const pool = STRENGTH_EXERCISES.map((e) => forEquipment(e, profile.equipment))
+    .filter((e): e is StrengthExercise => e !== null)
     .map((e) => substitute(e, profile.injuryHistory))
     .filter((e): e is StrengthExercise => e !== null);
 
@@ -41,7 +62,20 @@ export function buildStrengthSessions(
   const unique = pool.filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)));
 
   const priority = unique.filter((e) => e.priority);
-  const rest = unique.filter((e) => !e.priority);
+
+  /**
+   * Equipment-specific work first among the optional exercises.
+   *
+   * The remainder is sliced down to two per session, and the exercises a piece
+   * of equipment unlocks happened to sit at the end of the library — so
+   * answering "I have a pull-up bar" unlocked a dead hang and a hanging knee
+   * raise and then cut both, giving the identical session to someone who owns
+   * nothing. If a runner went and found the thing, it should show up in what
+   * they are asked to do.
+   */
+  const rest = unique
+    .filter((e) => !e.priority)
+    .sort((a, b) => Number(needsEquipment(b)) - Number(needsEquipment(a)));
 
   // Priority work appears in both sessions; the remainder splits between them.
   const size = opts.emphasis ? 3 : 2;

@@ -352,7 +352,19 @@ export type EquipmentTier = 'bodyweight' | 'bar' | 'loaded';
 export interface StrengthExercise {
   id: string;
   name: string;
+  /** Kept as a label. Selection is decided by `requires`, below. */
   tier: EquipmentTier;
+  /**
+   * What this needs to be possible at all. Empty means nothing but a floor.
+   *
+   * Equipment used to be a ladder — bodyweight ⊂ bar ⊂ loaded — which is not
+   * how owning things works: a pull-up bar does not give you dumbbells, and a
+   * step is not on the ladder at all. Two consequences, both real: saying you
+   * had a pull-up bar changed nothing about what you were asked to do, and the
+   * step-down, which needs a step, was handed to people who said they owned
+   * nothing. Any one of the listed items is enough.
+   */
+  requires?: Equipment[];
   /** Muscle/tissue target, e.g. "calf + Achilles". */
   target: string;
   sets: number;

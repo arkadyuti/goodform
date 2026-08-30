@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Profile, ScreeningFlag, StopReason } from '@goodform/shared';
-import { daysFor, listDays, proteinTarget, withinLimit } from '@goodform/shared';
+import {
+  buildStrengthSessions,
+  daysFor,
+  listDays,
+  proteinTarget,
+  withinLimit,
+  type Equipment,
+} from '@goodform/shared';
 import {
   useGeneratePlan,
   useProfile,
@@ -489,6 +496,15 @@ export function Onboarding() {
               ]}
             />
           </Field>
+
+          {/*
+            What the answer actually buys. Asking what someone owns and then
+            never visibly using it makes the question feel like paperwork —
+            and for the pull-up bar and the step it genuinely was: neither
+            changed a single exercise.
+          */}
+          <UnlockedByEquipment equipment={draft.equipment ?? ['none']} />
+
           <Next onClick={() => go('goal')} />
         </Section>
       )}
@@ -856,5 +872,46 @@ function Next({
     <Button full className="mt-1 py-3.5" onClick={onClick} disabled={disabled}>
       {label}
     </Button>
+  );
+}
+
+/**
+ * The exercises the current equipment answer adds, named.
+ *
+ * Built from the same function that builds the real sessions, so it cannot
+ * promise something the plan will not then ask for.
+ */
+function UnlockedByEquipment({ equipment }: { equipment: Equipment[] }) {
+  const { unlocked, base } = useMemo(() => {
+    const idsFor = (kit: Equipment[]) =>
+      new Set(
+        buildStrengthSessions({ equipment: kit, injuryHistory: [] }).flatMap((session) =>
+          session.exercises.map((exercise) => exercise.name),
+        ),
+      );
+    const withNothing = idsFor(['none']);
+    const withTheirs = idsFor(equipment.length ? equipment : ['none']);
+    return {
+      base: withNothing.size,
+      unlocked: [...withTheirs].filter((name) => !withNothing.has(name)),
+    };
+  }, [equipment]);
+
+  return (
+    <div className="mt-3 rounded-xl border border-line bg-paper p-4">
+      <Eyebrow>What that changes</Eyebrow>
+      {unlocked.length > 0 ? (
+        <p className="mt-1.5 leading-relaxed text-ink-soft">
+          Your strength sessions will include{' '}
+          <span className="text-ink">{unlocked.join(', ')}</span> — work that needs what you have.
+          The rest is bodyweight, so nothing depends on a gym.
+        </p>
+      ) : (
+        <p className="mt-1.5 leading-relaxed text-ink-soft">
+          Everything is bodyweight: {base} exercises across two short sessions a week, needing
+          nothing but a floor and a wall. Tick anything above and the strength work uses it.
+        </p>
+      )}
+    </div>
   );
 }
