@@ -13,6 +13,18 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * A sign-in that failed on the way back from Google.
+   *
+   * The server redirects here rather than answering the callback with its own
+   * JSON body, which is what someone not on the allowlist used to be shown —
+   * `{"message":"This app is not open for sign-ups."}` on a blank page, with
+   * the browser offering to save it as a file.
+   */
+  const params = new URLSearchParams(window.location.search);
+  const signinFailed = params.get('signin') === 'failed';
+  const notInvited = params.get('error') === 'SIGNUP_NOT_OPEN';
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
@@ -45,6 +57,16 @@ export function Login() {
           plus the daily habits that decide whether it sticks.
         </p>
       </div>
+
+      {signinFailed && (
+        <div className="mb-4">
+          <Note tone="alert">
+            {notInvited
+              ? 'This copy of GoodForm is invitation-only, and that address has not been added yet. Ask whoever sent you the link to add it.'
+              : 'That sign-in did not go through. Try again — and if it keeps happening, it is a problem at our end rather than yours.'}
+          </Note>
+        </div>
+      )}
 
       {config?.google && (
         <Button

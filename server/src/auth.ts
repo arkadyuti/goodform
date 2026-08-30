@@ -80,11 +80,34 @@ export const auth = betterAuth({
           const email = (user.email ?? '').toLowerCase();
           if (env.signupAllowlist.includes(email)) return;
           throw new APIError('FORBIDDEN', {
+            /**
+             * The `code` is what makes this a redirect rather than a raw body.
+             *
+             * Better Auth's OAuth callback only turns a thrown error into a
+             * redirect when it carries one (`callback.mjs`: `if (isAPIError(e)
+             * && e.body?.code)`). Without it the refusal fell through and the
+             * browser was handed `{"message":"This app is not open for
+             * sign-ups."}` as a plain file — Safari offered to save it as
+             * `google.json`.
+             */
+            code: 'SIGNUP_NOT_OPEN',
             message: 'This app is not open for sign-ups.',
           });
         },
       },
     },
+  },
+  /**
+   * Where a failed sign-in lands.
+   *
+   * Without this, a refusal during the OAuth callback is answered with the raw
+   * API body — so someone who is not on the allowlist sees
+   * `{"message":"This app is not open for sign-ups."}` as plain text on a blank
+   * page, and Safari offers to download it as `google.json`. Sending them back
+   * to the app means the login screen can say what happened in a sentence.
+   */
+  onAPIError: {
+    errorURL: `${env.appUrl}/?signin=failed`,
   },
   trustedOrigins: [env.appUrl, ...env.devOrigins],
   session: {
