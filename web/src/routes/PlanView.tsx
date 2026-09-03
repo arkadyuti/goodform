@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 import { usePlan, useSessions, useWeekReview } from '../api/hooks.ts';
-import { shiftDays, today } from '../lib/date.ts';
+import { shiftDays, shortDate, today } from '../lib/date.ts';
+import { windowFrom } from '@goodform/shared';
 import { Card, Eyebrow, Note } from '../components/ui.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
 
@@ -24,10 +25,17 @@ export function PlanView() {
   // One shared time scale across the block, so the ribbons compare honestly.
   const longestSessionSec = Math.max(...weeks.map((w) => (w.runSec + w.walkSec) * w.reps), 1);
 
-  const runsThisWeek = (sessionData?.sessions ?? []).filter(
-    (s) => s.planWeek === plan.currentWeek && s.type === 'run',
-  );
   const currentWeek = weeks.find((w) => w.index === plan.currentWeek);
+  // The week's current attempt, not everything ever stamped with its number —
+  // a repeated week used to show five of three runs done.
+  const window = windowFrom(currentWeek?.startedOn ?? plan.startDate);
+  const runsThisWeek = (sessionData?.sessions ?? []).filter(
+    (s) =>
+      (s.type === 'run' || s.type === 'baseline') &&
+      s.completion !== 'skipped' &&
+      s.date >= window.from &&
+      s.date <= window.to,
+  );
 
   return (
     <div className="flex flex-col gap-5 pt-1">
@@ -138,6 +146,11 @@ export function PlanView() {
                   {week.runSec / 60} min × {week.reps}
                   {week.isDeload && <span className="ml-1.5 text-walk-deep">· lighter week</span>}
                   {week.repeats > 0 && <span className="ml-1.5">· repeated {week.repeats}×</span>}
+                  {state === 'current' && (
+                    <span className="ml-1.5">
+                      · {shortDate(window.from)} – {shortDate(window.to)}
+                    </span>
+                  )}
                 </p>
               </div>
             </li>

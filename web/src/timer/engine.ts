@@ -16,6 +16,10 @@ export interface TimerState {
   totalDuration: number;
   running: boolean;
   finished: boolean;
+  /** Run intervals actually run: passed, and not skipped. */
+  completedReps: number;
+  /** Run intervals the runner skipped past. */
+  skippedReps: number;
 }
 
 /** Builds the interval list for one run-walk session. */
@@ -46,6 +50,15 @@ export class IntervalTimer {
   private raf: { raf: number | null; timeout: number } | null = null;
   private lastAnnouncedIndex = -1;
   private lastCountdown = -1;
+  /**
+   * Reps whose run interval was skipped rather than run.
+   *
+   * Progress used to be read straight off the timer's position, and Skip moves
+   * the position — so skipping every interval logged a full session, which the
+   * week's gate then counted, which advanced the plan. A skipped run is a run
+   * that did not happen.
+   */
+  private skipped = new Set<number>();
 
   constructor(
     intervals: Interval[],
@@ -82,6 +95,7 @@ export class IntervalTimer {
   state(): TimerState {
     const totalElapsed = Math.min(this.elapsedSec(), this.totalDuration);
     const { index, phaseElapsed } = this.locate(totalElapsed);
+    const passedRuns = this.intervals.filter((i, at) => i.phase === 'run' && at < index);
     return {
       intervals: this.intervals,
       index,
@@ -90,6 +104,8 @@ export class IntervalTimer {
       totalDuration: this.totalDuration,
       running: this.running,
       finished: index >= this.intervals.length,
+      completedReps: passedRuns.filter((i) => !this.skipped.has(i.rep)).length,
+      skippedReps: this.skipped.size,
     };
   }
 
@@ -112,14 +128,20 @@ export class IntervalTimer {
   reset(): void {
     this.pause();
     this.accumulated = 0;
+    this.skipped.clear();
     this.lastAnnouncedIndex = -1;
     this.lastCountdown = -1;
     this.handlers.onTick(this.state());
   }
 
-  /** Jumps to the start of the next interval, keeping wall-clock alignment. */
+  /**
+   * Jumps to the start of the next interval, keeping wall-clock alignment.
+   * Skipping a run interval forfeits it; skipping a walk is just less rest.
+   */
   skip(): void {
     const { index } = this.locate(this.elapsedSec());
+    const current = this.intervals[index];
+    if (current?.phase === 'run') this.skipped.add(current.rep);
     const target = this.intervals.slice(0, index + 1).reduce((sum, i) => sum + i.durationSec, 0);
     this.accumulated = target;
     this.startedAt = Date.now();

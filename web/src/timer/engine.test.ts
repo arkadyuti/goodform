@@ -91,6 +91,42 @@ describe('IntervalTimer', () => {
     expect(state.intervals[state.index]!.phase).toBe('walk');
   });
 
+  it('does not count a run interval that was skipped', () => {
+    // run 120 / walk 60 × 3: runs at 0, 180 and 360.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-24T06:00:00Z'));
+    const { timer } = harness();
+    timer.start();
+    vi.setSystemTime(new Date('2026-08-24T06:00:10Z'));
+    timer.skip(); // rep 1 forfeited
+    vi.setSystemTime(new Date('2026-08-24T06:06:00Z')); // 360s: into rep 3
+    const state = timer.state();
+    expect(state.completedReps).toBe(1);
+    expect(state.skippedReps).toBe(1);
+  });
+
+  it('counts a skipped walk as nothing lost', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-24T06:00:00Z'));
+    const { timer } = harness();
+    timer.start();
+    vi.setSystemTime(new Date('2026-08-24T06:02:10Z')); // 130s: walk 1
+    timer.skip();
+    expect(timer.state().completedReps).toBe(1);
+    expect(timer.state().skippedReps).toBe(0);
+  });
+
+  it('finishes a session of nothing but skips with nothing completed', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-24T06:00:00Z'));
+    const { timer } = harness();
+    timer.start();
+    for (let i = 0; i < 6; i++) timer.skip();
+    const state = timer.state();
+    expect(state.finished).toBe(true);
+    expect(state.completedReps).toBe(0);
+  });
+
   it('rewinds without going below zero', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-24T06:00:00Z'));

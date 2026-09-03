@@ -13,7 +13,9 @@ import {
   daysClear,
   proteinTarget,
   startOfWeek,
+  weekdayOf,
   type TrainingDays,
+  type WeekContext,
 } from '@goodform/shared';
 import {
   emptyLog,
@@ -56,7 +58,9 @@ export function Today() {
   // `isLoading`, not `isPending`: a disabled query stays 'pending' forever, so
   // gating the screen on `isPending` blanked all of Today the moment the plan
   // stopped being active.
-  const { isLoading: reviewPending } = useWeekReview(planData?.plan?.status === 'active');
+  const { data: review, isLoading: reviewPending } = useWeekReview(
+    planData?.plan?.status === 'active',
+  );
   const { data: breakData } = useBreakCheck(planData?.plan?.status === 'active');
   const saveLog = useSaveDailyLog(date);
 
@@ -71,7 +75,18 @@ export function Today() {
     run: settings?.runDays ?? DEFAULT_TRAINING_DAYS.run,
     strength: settings?.strengthDays ?? DEFAULT_TRAINING_DAYS.strength,
   };
-  const scheduled = scheduleFor(date, trainingDays);
+  /**
+   * The week is a quota, not a rota. What today asks for depends on what the
+   * week still owes and which days are left to hold it — a run missed on
+   * Monday is still owed on Tuesday, and never asked for the day after a run.
+   */
+  const weekContext: WeekContext | undefined =
+    review && week
+      ? { window: review.range, sessions: review.sessions, runsPerWeek: week.sessionsPerWeek }
+      : undefined;
+  const scheduled = scheduleFor(date, trainingDays, weekContext);
+  const movedHere =
+    scheduled !== 'rest' && !trainingDays[scheduled].includes(weekdayOf(date));
   const doneToday = (sessionData?.sessions ?? []).filter((s) => s.date === date);
   const runDone = doneToday.some((s) => s.type === 'run' || s.type === 'baseline');
   const strengthDone = doneToday.some((s) => s.type === 'strength');
@@ -102,7 +117,11 @@ export function Today() {
           {headline(scheduled, runDone || strengthDone)}
         </h1>
         <div className="mt-4">
-          <WeekStrip sessions={sessionData?.sessions ?? []} trainingDays={trainingDays} />
+          <WeekStrip
+            sessions={sessionData?.sessions ?? []}
+            trainingDays={trainingDays}
+            week={weekContext}
+          />
         </div>
         <Link
           to="/calendar"
@@ -139,6 +158,12 @@ export function Today() {
                 <span className="text-[0.8125rem] font-semibold text-good">Done today</span>
               )}
             </div>
+            {movedHere && !runDone && (
+              <p className="mt-1 text-[0.8125rem] text-ink-faint">
+                Not your usual day — the week still owes this one, and the days left cannot hold
+                it.
+              </p>
+            )}
             <p className="mt-2 flex items-baseline gap-2">
               <span className="tabular text-5xl" style={{ fontWeight: 800 }}>
                 {week.runSec / 60}
@@ -187,6 +212,12 @@ export function Today() {
                 <span className="text-[0.8125rem] font-semibold text-good">Done today</span>
               )}
             </div>
+            {movedHere && !strengthDone && (
+              <p className="mt-1 text-[0.8125rem] text-ink-faint">
+                Not your usual day — the week still owes this one, and the days left cannot hold
+                it.
+              </p>
+            )}
             <p className="mt-2 text-[1.0625rem] leading-snug">
               Calves, shins and single-leg control — the tissue that decides whether you are still
               running in six months.
@@ -220,13 +251,12 @@ export function Today() {
         Logging one used to end in silence — the form promises "thirty seconds
         now decides next week" and then nothing ever showed what it decided.
       */}
-      {ready && (runDone || strengthDone) && plan?.status === 'active' && week && (
+      {ready && (runDone || strengthDone) && plan?.status === 'active' && week && review && (
         <WeekProgress
-          runsThisWeek={(sessionData?.sessions ?? []).filter(
+          runsThisWeek={review.sessions.filter(
             (session) =>
               (session.type === 'run' || session.type === 'baseline') &&
               session.completion !== 'skipped' &&
-              session.date >= startOfWeek(date) &&
               session.date <= date,
           )}
           runsPlanned={week.sessionsPerWeek}
@@ -257,7 +287,7 @@ export function Today() {
       {ready && <DueNow />}
 
       {ready && scheduled === 'rest' && (
-        <RestDay sessions={sessionData?.sessions ?? []} days={trainingDays} />
+        <RestDay sessions={sessionData?.sessions ?? []} days={trainingDays} week={weekContext} />
       )}
 
       {ready && plan?.status === 'active' && (
@@ -741,7 +771,15 @@ function SomethingElse({
 }
 
 /** What a rest day says. Choosing to do something anyway lives in `SomethingElse`. */
-function RestDay({ sessions, days }: { sessions: SessionRow[]; days: TrainingDays }) {
+function RestDay({
+  sessions,
+  days,
+  week,
+}: {
+  sessions: SessionRow[];
+  days: TrainingDays;
+  week?: WeekContext;
+}) {
   const date = today();
   const runs = sessions.filter(
     (s) => (s.type === 'run' || s.type === 'baseline') && s.completion !== 'skipped',
@@ -752,7 +790,7 @@ function RestDay({ sessions, days }: { sessions: SessionRow[]; days: TrainingDay
   // have not done anything yet — so the first one says where the plan starts
   // instead.
   const nothingLoggedYet = runs.length === 0;
-  const firstRun = nextRunDate(date, days);
+  const firstRun = nextRunDate(date, days, week);
 
   return (
     <Card>
@@ -776,10 +814,10 @@ function RestDay({ sessions, days }: { sessions: SessionRow[]; days: TrainingDay
 }
 
 /** The next day the plan asks for a run, starting from tomorrow. */
-function nextRunDate(from: string, days: TrainingDays): string {
+function nextRunDate(from: string, days: TrainingDays, week?: WeekContext): string {
   for (let i = 1; i <= 7; i++) {
     const candidate = shiftDays(from, i);
-    if (scheduleFor(candidate, days) === 'run') return candidate;
+    if (scheduleFor(candidate, days, week) === 'run') return candidate;
   }
   return shiftDays(from, 1);
 }
@@ -915,12 +953,13 @@ function PausedBanner({ reason }: { reason: string | null }) {
 }
 
 /**
- * The end-of-week decision, surfaced where it gets seen.
+ * Where the week stands, and what the last one decided.
  *
- * Two rules govern *when* it appears, because getting that wrong made the card
- * nonsense. The gate judges a whole week, so an attendance verdict asked for on
- * a Wednesday always reads "sessions missed" — those wait until the week is
- * actually over. A discomfort verdict is a safety signal and does not wait.
+ * The plan settles itself — a closed week has moved on or come round again
+ * before this renders — so there is no "start next week" button any more.
+ * What remains: on a fresh window, why this is the week it is; the choices
+ * that are still the runner's (step back, ease, push on); and the discomfort
+ * verdicts, which never wait for Sunday.
  */
 function WeekGate({ hasPlan }: { hasPlan: boolean }) {
   const { data, isLoading } = useWeekReview(hasPlan);
@@ -930,53 +969,41 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
   if (!data || isLoading) return null;
 
   const gate = data.gate;
-  const discomfortDriven =
-    gate.decision === 'pause_medical' || (gate.decision === 'repeat' && gate.strengthEmphasis);
-  if (!discomfortDriven && !data.weekOver) return null;
+  const overrideButton = (overriddenGate: string) => (
+    <Button
+      variant="secondary"
+      disabled={decide.isPending}
+      onClick={() =>
+        showRisk
+          ? decide.mutate({
+              action: 'advance',
+              override: true,
+              fromWeek: data.week.index,
+              overriddenGate,
+            })
+          : setShowRisk(true)
+      }
+    >
+      {showRisk ? 'Yes, move on anyway' : `Move on to week ${data.week.index + 1}`}
+    </Button>
+  );
+  const risk = showRisk && (
+    <Note tone="alert">
+      Tendons and bone take three to six months to adapt — far longer than your lungs. Pushing
+      through discomfort is the most common way beginners end up stopping altogether. It is still
+      your call.
+    </Note>
+  );
 
-  // A week finished cleanly. Without this the plan simply never moved on: the
-  // only control that advanced it was the override, which is why being told to
-  // "move to next week anyway" after a good week made no sense.
-  if (gate.decision === 'advance') {
+  // Discomfort speaks at once, about what has already happened.
+  if (gate.decision === 'pause_medical') {
     return (
-      <Card className="border-good">
-        <Eyebrow as="h2" className="!text-good">
-          Week done
+      <Card className="border-alert bg-alert-wash">
+        <Eyebrow as="h2" className="!text-alert">
+          Stop and check
         </Eyebrow>
-        <p className="mt-1.5 text-[1.0625rem] leading-snug">{gate.reason}</p>
-        <Button
-          full
-          className="mt-3.5"
-          disabled={decide.isPending}
-          onClick={() => decide.mutate({ action: 'advance', fromWeek: data.week.index })}
-        >
-          Start next week
-        </Button>
-      </Card>
-    );
-  }
-
-  const tone = gate.decision === 'pause_medical' ? 'alert' : 'neutral';
-
-  return (
-    <Card className={tone === 'alert' ? 'border-alert bg-alert-wash' : 'border-walk bg-walk-wash'}>
-      <Eyebrow as="h2" className={tone === 'alert' ? '!text-alert' : '!text-walk-deep'}>
-        {gate.decision === 'pause_medical'
-          ? 'Stop and check'
-          : discomfortDriven
-            ? 'Worth easing off'
-            : 'End of week'}
-      </Eyebrow>
-      {data.behindByWeeks > 0 && (
-        <p className="mt-1.5 leading-snug text-ink-soft">
-          Your plan is still on week {data.week.index}, {data.behindByWeeks}{' '}
-          {data.behindByWeeks === 1 ? 'week' : 'weeks'} behind the calendar — it only moves when you
-          decide what happens next. This is about the week you have just had.
-        </p>
-      )}
-      <p className="mt-1.5 leading-snug">{gate.reason}</p>
-      <div className="mt-3.5 flex flex-wrap gap-2">
-        {gate.decision === 'pause_medical' ? (
+        <p className="mt-1.5 leading-snug">{gate.reason}</p>
+        <div className="mt-3.5 flex flex-wrap gap-2">
           <Button
             variant="alert"
             disabled={decide.isPending}
@@ -984,25 +1011,73 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
           >
             Pause my plan
           </Button>
-        ) : (
-          <Button
-            disabled={decide.isPending}
-            onClick={() => decide.mutate({ action: 'repeat', fromWeek: data.week.index })}
-          >
-            {data.weekOver ? 'Repeat this week' : 'Repeat it rather than move on'}
-          </Button>
-        )}
-        {gate.decision === 'ease' && gate.easeTo && (
+          {overrideButton(gate.decision)}
+        </div>
+        {risk}
+      </Card>
+    );
+  }
+
+  if (gate.decision === 'repeat' && gate.strengthEmphasis) {
+    return (
+      <Card className="border-walk bg-walk-wash">
+        <Eyebrow as="h2" className="!text-walk-deep">
+          Worth easing off
+        </Eyebrow>
+        <p className="mt-1.5 leading-snug">{gate.reason}</p>
+        <p className="mt-1.5 leading-snug text-ink-soft">
+          Nothing to tap: this week comes round again on Monday by itself, with the extra strength
+          work already in it.
+        </p>
+        <div className="mt-3.5 flex flex-wrap gap-2">{overrideButton(gate.decision)}</div>
+        {risk}
+      </Card>
+    );
+  }
+
+  // Everything below explains a window that has just opened.
+  const last = data.last;
+  if (!data.fresh || !last) return null;
+
+  if (last.kind === 'advanced') {
+    return (
+      <Card className="border-good">
+        <Eyebrow as="h2" className="!text-good">
+          Week {last.week} done
+        </Eyebrow>
+        <p className="mt-1.5 text-[1.0625rem] leading-snug">
+          {last.finished} of {data.week.sessionsPerWeek} runs finished as planned. This is week{' '}
+          {data.week.index}.
+        </p>
+      </Card>
+    );
+  }
+
+  const verdict = last.gate;
+  return (
+    <Card className="border-walk bg-walk-wash">
+      <Eyebrow as="h2" className="!text-walk-deep">
+        Week {last.week} again
+      </Eyebrow>
+      <p className="mt-1.5 text-[1.0625rem] leading-snug">
+        {last.finished} of {data.week.sessionsPerWeek} runs finished last time, so the same week
+        comes round again. That is the plan being careful, not you falling behind.
+      </p>
+      {(verdict.decision === 'step_back' || verdict.decision === 'ease') && (
+        <p className="mt-1.5 leading-snug text-ink-soft">{verdict.reason}</p>
+      )}
+      <div className="mt-3.5 flex flex-wrap gap-2">
+        {verdict.decision === 'ease' && verdict.easeTo && (
           <Button
             disabled={decide.isPending}
             onClick={() =>
-              decide.mutate({ action: 'ease', fromWeek: data.week.index, easeTo: gate.easeTo })
+              decide.mutate({ action: 'ease', fromWeek: data.week.index, easeTo: verdict.easeTo })
             }
           >
             Make the week smaller
           </Button>
         )}
-        {gate.decision === 'step_back' && (
+        {verdict.decision === 'step_back' && data.week.index > 1 && (
           <Button
             variant="secondary"
             disabled={decide.isPending}
@@ -1011,31 +1086,9 @@ function WeekGate({ hasPlan }: { hasPlan: boolean }) {
             Step back a week
           </Button>
         )}
-        {gate.overridable && (
-          <Button
-            variant="secondary"
-            onClick={() =>
-              showRisk
-                ? decide.mutate({
-                    action: 'advance',
-                    override: true,
-                    fromWeek: data.week.index,
-                    overriddenGate: gate.decision,
-                  })
-                : setShowRisk(true)
-            }
-          >
-            {showRisk ? 'Yes, move on anyway' : 'Move on to week ' + (data.week.index + 1)}
-          </Button>
-        )}
+        {overrideButton(verdict.decision)}
       </div>
-      {showRisk && (
-        <Note tone="alert">
-          Tendons and bone take three to six months to adapt — far longer than your lungs. Pushing
-          through discomfort is the most common way beginners end up stopping altogether. It is
-          still your call.
-        </Note>
-      )}
+      {risk}
     </Card>
   );
 }

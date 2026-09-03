@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, desc, eq, gte, inArray, lte, ne } from 'drizzle-orm';
+import { and, desc, eq, gte, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   LIMITS,
@@ -10,6 +10,9 @@ import {
   daysBetween,
   evaluateWeek,
   generatePlan,
+  inWindow,
+  windowFrom,
+  STRENGTH_DAYS_PER_WEEK,
   needsFreshBaseline,
   nextGoalOptions,
   returnFromBreak,
@@ -20,6 +23,8 @@ import {
 } from '@goodform/shared';
 import { db, schema } from '../db/index.js';
 import { requireAuth, todayFrom, type AppEnv } from '../middleware.js';
+import { activePlan, toSession } from '../plan/store.js';
+import { settlePlan } from '../plan/settle.js';
 
 function toProfile(row: typeof schema.profiles.$inferSelect): Profile {
   return {
@@ -40,62 +45,6 @@ function toProfile(row: typeof schema.profiles.$inferSelect): Profile {
   };
 }
 
-function toSession(row: typeof schema.workoutSessions.$inferSelect): WorkoutSession {
-  return {
-    id: row.id,
-    date: row.date,
-    type: row.type as WorkoutSession['type'],
-    planWeek: row.planWeek,
-    prescription: row.prescription as WorkoutSession['prescription'],
-    completion: row.completion as WorkoutSession['completion'],
-    effort: row.effort,
-    discomfort: row.discomfortLocation
-      ? {
-          location: row.discomfortLocation as NonNullable<WorkoutSession['discomfort']>['location'],
-          severity: row.discomfortSeverity as NonNullable<WorkoutSession['discomfort']>['severity'],
-        }
-      : null,
-    intervalsCompleted: row.intervalsCompleted,
-    durationSec: row.durationSec,
-    notes: row.notes,
-  };
-}
-
-/**
- * The plan a runner is currently on.
- *
- * `paused` counts. Pausing is what the app asks for after real discomfort, and
- * looking only for `active` meant every plan endpoint 404'd the moment someone
- * took that advice — including `resume`, whose entire purpose is to leave the
- * paused state. Following the safety advice bricked the plan, permanently, with
- * no error shown.
- */
-async function activePlan(userId: string, includePaused = true) {
-  const statuses = includePaused ? ['active', 'paused'] : ['active'];
-  const [plan] = await db
-    .select()
-    .from(schema.plans)
-    .where(and(eq(schema.plans.userId, userId), inArray(schema.plans.status, statuses)))
-    .orderBy(desc(schema.plans.createdAt))
-    .limit(1);
-  if (!plan) return null;
-  const weeks = await db
-    .select()
-    .from(schema.planWeeks)
-    .where(eq(schema.planWeeks.planId, plan.id))
-    .orderBy(schema.planWeeks.index);
-  return { plan, weeks };
-}
-
-/** Calendar dates covered by a plan week, so sessions can be grouped by week. */
-function weekRange(startDate: string, weekIndex: number, repeatsBefore: number) {
-  const start = new Date(`${startDate}T00:00:00Z`);
-  start.setUTCDate(start.getUTCDate() + (weekIndex - 1 + repeatsBefore) * 7);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
-}
-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const planRoutes = new Hono<AppEnv>()
@@ -109,6 +58,7 @@ export const planRoutes = new Hono<AppEnv>()
    */
   .get('/', async (c) => {
     const userId = c.get('userId');
+    await settlePlan(userId, await todayFrom(c));
     const [plan] = await db
       .select()
       .from(schema.plans)
@@ -222,6 +172,7 @@ export const planRoutes = new Hono<AppEnv>()
           sessionsPerWeek: w.sessionsPerWeek,
           isDeload: w.isDeload,
           totalRunSec: w.totalRunSec,
+          startedOn: w.index === 1 ? startDate : null,
         })),
       );
       return created;
@@ -231,37 +182,27 @@ export const planRoutes = new Hono<AppEnv>()
   })
 
   /** Evaluates the current week against what was logged and returns the gate. */
+  /**
+   * The week the runner is in, and how it stands.
+   *
+   * The plan is settled first, so the window here is always the live one: a
+   * week that closed since the last visit has already moved on or come round
+   * again by the time this reads it. `last` is what that closing decided, so
+   * a Monday can say why this is week two — or week one again — without the
+   * runner having to remember.
+   */
   .get('/week-review', async (c) => {
     const userId = c.get('userId');
+    const today = await todayFrom(c);
+    await settlePlan(userId, today);
+
     const current = await activePlan(userId);
     if (!current) return c.json({ error: 'No active plan' }, 404);
-
-    const week = current.weeks.find((w) => w.index === current.plan.currentWeek);
+    const { plan, weeks } = current;
+    const week = weeks.find((w) => w.index === plan.currentWeek);
     if (!week) return c.json({ error: 'Week not found' }, 404);
 
-    const repeatsBefore =
-      current.weeks.filter((w) => w.index < week.index).reduce((sum, w) => sum + w.repeats, 0) +
-      week.repeats;
-    const planned = weekRange(current.plan.startDate, week.index, repeatsBefore);
-
-    /**
-     * Judge the week the runner is actually in.
-     *
-     * The window is anchored to the plan's start date and only moves when a
-     * gate decision is tapped — so someone who trains but never taps one has
-     * the gate grading a window weeks in the past, finding nothing in it, and
-     * reporting that they missed everything. Their whole week of work sat
-     * invisible to the one thing that reads it. When the plan has fallen
-     * behind the calendar, the current calendar week is the honest window;
-     * `behindByWeeks` tells the client to say so rather than accuse.
-     */
-    const todayForGate = await todayFrom(c);
-    const behindByWeeks =
-      planned.to < todayForGate ? Math.floor(daysBetween(planned.to, todayForGate) / 7) : 0;
-    const { from, to } =
-      behindByWeeks > 0
-        ? { from: startOfWeek(todayForGate), to: addDays(startOfWeek(todayForGate), 6) }
-        : planned;
+    const range = windowFrom(week.startedOn ?? plan.startDate);
 
     const rows = await db
       .select()
@@ -269,35 +210,96 @@ export const planRoutes = new Hono<AppEnv>()
       .where(
         and(
           eq(schema.workoutSessions.userId, userId),
-          eq(schema.workoutSessions.type, 'run'),
-          gte(schema.workoutSessions.date, from),
-          lte(schema.workoutSessions.date, to),
+          gte(schema.workoutSessions.date, plan.startDate),
         ),
       );
+    const all = rows.map(toSession);
+    const isRun = (s: WorkoutSession) => s.type === 'run' || s.type === 'baseline';
+    const sessions = all.filter((s) => inWindow(s.date, range));
+    const weekOver = today > range.to;
+    const gate = evaluateWeek(week, sessions.filter(isRun), week.repeats, weekOver);
 
-    const gate = evaluateWeek(
-      { ...week, isDeload: week.isDeload, sessionsPerWeek: week.sessionsPerWeek },
-      rows.map(toSession),
-      // How many times this same week has already come round. Without it the
-      // gate is stateless and can only ever offer the same repeat again.
-      week.repeats,
-      // The gate judges a *whole* week. Asked on a Wednesday it used to report
-      // missed sessions regardless, because the rest of the week has not
-      // happened yet — so it is told outright whether the week is over.
-      todayForGate > to,
-    );
+    /**
+     * What the last closed window decided.
+     *
+     * For a repeat, walk back a window at a time to the attempt that actually
+     * had running in it — a week the plan merely waited through says nothing
+     * worth repeating to the runner.
+     */
+    let last: {
+      kind: 'repeated' | 'advanced';
+      week: number;
+      window: { from: string; to: string };
+      gate: ReturnType<typeof evaluateWeek>;
+      attempted: number;
+      finished: number;
+    } | null = null;
+    const summarise = (runs: WorkoutSession[]) => ({
+      attempted: runs.filter((s) => s.completion !== 'skipped').length,
+      finished: runs.filter((s) => s.completion === 'full').length,
+    });
+    if (week.repeats > 0) {
+      let to = addDays(range.from, -1);
+      for (let back = 0; back < 8 && to >= plan.startDate; back++) {
+        const from = addDays(to, -6) <= plan.startDate ? plan.startDate : addDays(to, -6);
+        const window = { from, to };
+        const runs = all.filter((s) => isRun(s) && inWindow(s.date, window));
+        if (runs.length > 0) {
+          last = {
+            kind: 'repeated',
+            week: week.index,
+            window,
+            gate: evaluateWeek(week, runs, Math.max(0, week.repeats - 1), true),
+            ...summarise(runs),
+          };
+          break;
+        }
+        to = addDays(from, -1);
+      }
+    } else if (week.index > 1) {
+      const previous = weeks.find((w) => w.index === week.index - 1);
+      if (previous) {
+        const window = previous.startedOn
+          ? windowFrom(previous.startedOn)
+          : { from: addDays(range.from, -7), to: addDays(range.from, -1) };
+        const runs = all.filter((s) => isRun(s) && inWindow(s.date, window));
+        last = {
+          kind: 'advanced',
+          week: previous.index,
+          window,
+          gate: evaluateWeek(previous, runs, previous.repeats, true),
+          ...summarise(runs),
+        };
+      }
+    }
 
-    const today = await todayFrom(c);
+    const daysWith = (test: (s: WorkoutSession) => boolean) =>
+      new Set(sessions.filter((s) => s.completion !== 'skipped' && test(s)).map((s) => s.date))
+        .size;
+
     return c.json({
       gate,
       week,
-      range: { from, to },
-      weekOver: today > to,
-      daysLeft: Math.max(0, daysBetween(today, to)),
-      /** Weeks the plan has fallen behind the calendar, 0 when it is current. */
-      behindByWeeks,
-      plannedRange: planned,
-      sessions: rows.map(toSession),
+      range,
+      weekOver,
+      daysLeft: Math.max(0, daysBetween(today, range.to)),
+      sessions,
+      last,
+      /** Nothing logged in this window yet — the moment to explain `last`. */
+      fresh: sessions.length === 0,
+      /**
+       * Extra strength work carries into the repeated attempt. It used to be
+       * read off the current window only, so accepting a repeat — which opened
+       * an empty window — cancelled the very emphasis it had just recommended.
+       */
+      strengthEmphasis:
+        gate.strengthEmphasis || (last?.kind === 'repeated' && last.gate.strengthEmphasis),
+      quota: {
+        runs: week.sessionsPerWeek,
+        strength: STRENGTH_DAYS_PER_WEEK,
+        runsDone: daysWith(isRun),
+        strengthDone: daysWith((s) => s.type === 'strength'),
+      },
     });
   })
 
@@ -332,6 +334,8 @@ export const planRoutes = new Hono<AppEnv>()
       .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'Invalid decision' }, 400);
 
+    const today = await todayFrom(c);
+    await settlePlan(userId, today);
     const current = await activePlan(userId);
     if (!current) return c.json({ error: 'No active plan' }, 404);
     const { plan, weeks } = current;
@@ -362,6 +366,14 @@ export const planRoutes = new Hono<AppEnv>()
             and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
           );
         const next = plan.currentWeek + 1;
+        // Pushed on part-way through: the next week starts today, not on a
+        // Monday that has already passed.
+        if (next <= last) {
+          await db
+            .update(schema.planWeeks)
+            .set({ startedOn: today })
+            .where(and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, next)));
+        }
         await db
           .update(schema.plans)
           .set(next > last ? { status: 'completed' } : { currentWeek: next, pausedReason: null })
@@ -408,6 +420,10 @@ export const planRoutes = new Hono<AppEnv>()
       case 'step_back': {
         const back = Math.max(1, plan.currentWeek - 1);
         await db
+          .update(schema.planWeeks)
+          .set({ startedOn: today })
+          .where(and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, back)));
+        await db
           .update(schema.plans)
           .set({ currentWeek: back, pausedReason: null })
           .where(eq(schema.plans.id, plan.id));
@@ -424,6 +440,14 @@ export const planRoutes = new Hono<AppEnv>()
         return c.json({ status: 'paused' });
       }
       case 'resume': {
+        // A pause is not a failed week. The week picks up from this Monday,
+        // rather than being rolled through every window the pause covered.
+        await db
+          .update(schema.planWeeks)
+          .set({ startedOn: startOfWeek(today) })
+          .where(
+            and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
+          );
         await db
           .update(schema.plans)
           .set({ status: 'active', pausedReason: null })
@@ -623,6 +647,7 @@ export const planRoutes = new Hono<AppEnv>()
           sessionsPerWeek: w.sessionsPerWeek,
           isDeload: w.isDeload,
           totalRunSec: w.totalRunSec,
+          startedOn: w.index === 1 ? startDate : null,
         })),
       );
       return created;
@@ -690,6 +715,10 @@ export const planRoutes = new Hono<AppEnv>()
 
     if (result.stepBackWeeks > 0) {
       const back = Math.max(1, current.plan.currentWeek - result.stepBackWeeks);
+      await db
+        .update(schema.planWeeks)
+        .set({ startedOn: await todayFrom(c) })
+        .where(and(eq(schema.planWeeks.planId, current.plan.id), eq(schema.planWeeks.index, back)));
       await db
         .update(schema.plans)
         .set({ currentWeek: back })

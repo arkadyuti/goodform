@@ -5,7 +5,6 @@ import {
   severityLabel,
   DISCOMFORT_LOCATIONS,
   EFFORT_LEVELS,
-  daysBetween,
   effortHint,
   effortLabel,
   type DiscomfortLocation,
@@ -402,8 +401,15 @@ function SessionBackfill({ day }: { day: CalendarDay }) {
   // towards that week's gate and shows up on the trend charts.
   const planWeek = useMemo(() => {
     if (!plan || day.date < plan.startDate) return null;
-    const index = Math.floor(daysBetween(plan.startDate, day.date) / 7) + 1;
-    return weeks.find((w) => w.index === Math.min(index, weeks.length)) ?? null;
+    // The week whose current attempt had begun by that date. Windows move when
+    // a week comes round again, so counting sevens from the start date put a
+    // backfilled run in a week the plan had not reached.
+    let chosen: (typeof weeks)[number] | null = null;
+    for (const week of weeks) {
+      if (!week.startedOn || week.startedOn > day.date) continue;
+      if (!chosen?.startedOn || week.startedOn > chosen.startedOn) chosen = week;
+    }
+    return chosen ?? weeks[0] ?? null;
   }, [plan, weeks, day.date]);
 
   const save = async () => {

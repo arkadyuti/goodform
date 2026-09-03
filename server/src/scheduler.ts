@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte, or, sql } from 'drizzle-orm';
 import {
   addDays,
   assessNutritionRisk,
@@ -8,6 +8,8 @@ import {
   minutesOfDay,
   proteinTarget,
   scheduleFor,
+  windowFrom,
+  RUN_DAYS_PER_WEEK,
   timeFromMinutes,
   type DueReminder,
   type ReminderPrefs,
@@ -129,28 +131,50 @@ async function tickUser(settingsRow: SettingsRow, now: Date): Promise<void> {
       ]
     : doseStates(items, events, localDate, localTime);
 
-  // Is a session outstanding today?
-  const scheduled = scheduleFor(localDate, trainingDays(settingsRow));
+  /**
+   * Is a session outstanding today?
+   *
+   * Asked of the week, not the weekday: a run missed on Monday is still owed,
+   * and the nudge should follow it to the day the plan has moved it to. The
+   * plan is not settled here — that happens when the app is opened — so a
+   * window nobody has looked at since it closed falls back to the rota.
+   */
+  const days = trainingDays(settingsRow);
+  let scheduled = scheduleFor(localDate, days);
   let sessionDue = false;
-  if (scheduled !== 'rest') {
-    const [plan] = await db
+  const [plan] = await db
+    .select()
+    .from(schema.plans)
+    .where(and(eq(schema.plans.userId, userId), eq(schema.plans.status, 'active')))
+    .limit(1);
+  if (plan) {
+    const [week] = await db
       .select()
-      .from(schema.plans)
-      .where(and(eq(schema.plans.userId, userId), eq(schema.plans.status, 'active')))
-      .limit(1);
-    if (plan) {
-      const logged = await db
-        .select({ id: schema.workoutSessions.id })
-        .from(schema.workoutSessions)
-        .where(
-          and(
-            eq(schema.workoutSessions.userId, userId),
-            eq(schema.workoutSessions.date, localDate),
-          ),
-        )
-        .limit(1);
-      sessionDue = logged.length === 0;
-    }
+      .from(schema.planWeeks)
+      .where(
+        and(eq(schema.planWeeks.planId, plan.id), eq(schema.planWeeks.index, plan.currentWeek)),
+      );
+    const window = windowFrom(week?.startedOn ?? plan.startDate);
+    const sessions = await db
+      .select({
+        date: schema.workoutSessions.date,
+        type: schema.workoutSessions.type,
+        completion: schema.workoutSessions.completion,
+      })
+      .from(schema.workoutSessions)
+      .where(
+        and(
+          eq(schema.workoutSessions.userId, userId),
+          gte(schema.workoutSessions.date, window.from),
+          lte(schema.workoutSessions.date, window.to),
+        ),
+      );
+    scheduled = scheduleFor(localDate, days, {
+      window,
+      sessions,
+      runsPerWeek: week?.sessionsPerWeek ?? RUN_DAYS_PER_WEEK,
+    });
+    sessionDue = scheduled !== 'rest' && !sessions.some((s) => s.date === localDate);
   }
 
   const [lastCheck] = await db

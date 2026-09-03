@@ -79,6 +79,8 @@ export interface PlanWeekRow {
   totalRunSec: number;
   repeats: number;
   completedAt: string | null;
+  /** First day of the week's current attempt; null on rows from before it was recorded. */
+  startedOn: string | null;
 }
 
 export interface DailyLogRow {
@@ -201,14 +203,34 @@ export function useWeekReview(enabled = true) {
         /** False mid-week, when an attendance verdict would be premature. */
         weekOver: boolean;
         daysLeft: number;
-        /** Weeks the plan has fallen behind the calendar; 0 when current. */
-        behindByWeeks: number;
-        sessions: unknown[];
+        /** Every session in the window, all types. */
+        sessions: SessionRow[];
+        /** What the last closed window decided — why this is week N, or N again. */
+        last: {
+          kind: 'repeated' | 'advanced';
+          week: number;
+          window: { from: string; to: string };
+          gate: {
+            decision: string;
+            reason: string;
+            strengthEmphasis: boolean;
+            easeTo?: { runSec: number; reps: number };
+          };
+          attempted: number;
+          finished: number;
+        } | null;
+        /** Nothing logged in this window yet. */
+        fresh: boolean;
+        /** Extra strength work this week, carried into a repeated attempt. */
+        strengthEmphasis: boolean;
+        quota: { runs: number; strength: number; runsDone: number; strengthDone: number };
       }>(`/plan/week-review?date=${today()}`),
     enabled,
     retry: false,
   });
 }
+
+export type WeekReview = NonNullable<ReturnType<typeof useWeekReview>['data']>;
 
 export function useSessions(from?: string) {
   return useQuery({

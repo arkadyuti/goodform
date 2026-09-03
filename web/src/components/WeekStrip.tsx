@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import type { TrainingDays } from '@goodform/shared';
+import type { TrainingDays, WeekContext } from '@goodform/shared';
 import type { SessionRow } from '../api/hooks.ts';
 import { scheduleFor, shiftDays, today } from '../lib/date.ts';
 
@@ -13,9 +13,12 @@ const LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 export function WeekStrip({
   sessions,
   trainingDays,
+  week,
 }: {
   sessions: SessionRow[];
   trainingDays: TrainingDays;
+  /** The live week, so the days ahead show where the plan has moved things. */
+  week?: WeekContext;
 }) {
   const now = today();
   const start = shiftDays(now, -new Date(`${now}T12:00:00`).getDay());
@@ -29,7 +32,7 @@ export function WeekStrip({
       {/* The accessible name has to contain the visible day letters. */}
       <span className="sr-only">This week's sessions — open the plan.</span>
       {days.map((date, i) => {
-        const scheduled = scheduleFor(date, trainingDays);
+        const scheduled = scheduleFor(date, trainingDays, week);
         const done = sessions.some((s) => s.date === date && s.completion !== 'skipped');
         const isToday = date === now;
         const past = date < now;

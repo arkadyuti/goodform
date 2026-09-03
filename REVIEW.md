@@ -97,6 +97,32 @@ things deliberately left.
   rather than a wrong date, and the range validator rejects it. Documented in
   the tests.
 
+## The week is a quota, not a rota (2026-09-03)
+
+The plan used to be a counter that moved when a button was tapped, judged
+against a window arithmetic'd from the start date. Now:
+
+- **Every window is Mon–Sun** (a late start runs to the Sunday after next), and
+  a closed window settles itself the next time anything reads the plan: target
+  met, on to the next week; not met, the same week again and every later week
+  shifts with it; nothing logged at all, the dates move but it is not counted
+  as an attempt. `settleWeeks` in `shared/src/plan-engine/weeks.ts` is pure and
+  tested; `server/src/plan/settle.ts` applies it under a row lock.
+- **Today asks for what the week still owes.** Preferred days first; another
+  day only when the preferred days left cannot hold it; never a run the day
+  after a run. `scheduleFor` in `shared/src/schedule.ts`, with the rota as the
+  fallback when there is no live week. The reminder scheduler and the calendar
+  history read the same function.
+- **A skipped run interval does not count.** The timer tracks forfeited reps;
+  progress and completion read those, not the timer's position.
+- **The review card explains rather than asks.** On a fresh window it says why
+  this is week N (again); the choices left to the runner are step back, ease,
+  push on, pause. There is no "start next week" button.
+- Strength emphasis carries into a repeated attempt instead of vanishing with
+  the window that recommended it. The plan's calendar-history `scheduled`
+  field is reconstructed from contiguous windows and is an approximation after
+  a step-back or push-on.
+
 ## Still open, from the 2026-08-29 bug hunt
 
 Five agents drove the app and simulated months of use. Everything CRITICAL and
@@ -115,8 +141,6 @@ Each was verified against the running app, not inferred from the code.
   never expire.
 
 ### The runner's experience
-- **Skip fabricates volume.** Skipping every interval still logs a full
-  20-minute session at `completion: full`, which then feeds progression.
 - **A height/weight combination can still be absurd within its bounds** — 250 cm
   and 25 kg are each individually allowed, and together give a BMI of 4 and a
   38 g protein target. Each field is now range-checked; the *combination* is not.
@@ -131,9 +155,6 @@ Each was verified against the running app, not inferred from the code.
 
 ### Plan
 - **A block never reaches its own goal** before offering the next distance up.
-- **A plan started mid-week uses a Thu–Wed week** while the whole UI shows
-  Mon–Sun.
-- **Accepting a repeat cancels the extra strength work** it just recommended.
 
 ## Operating notes
 

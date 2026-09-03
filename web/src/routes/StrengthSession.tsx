@@ -23,7 +23,7 @@ export function StrengthSession() {
   const profile = profileData?.profile;
   // A repeated week comes with extra strength work — that is what makes the
   // repeat useful rather than just a pause (FR-3.2).
-  const emphasis = review?.gate.strengthEmphasis ?? false;
+  const emphasis = review?.strengthEmphasis ?? false;
   /**
    * A week the plan has eased asks for the same movements with a set taken off.
    * Dropping exercises to make a week lighter is what makes a routine

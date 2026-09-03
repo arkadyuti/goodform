@@ -11,6 +11,8 @@ import {
   DEFAULT_TRAINING_DAYS,
   reachedTheInterval,
   scheduleFor,
+  windowContaining,
+  RUN_DAYS_PER_WEEK,
   startOfWeek,
   type Adherence,
   type WorkoutSession,
@@ -481,7 +483,16 @@ export const progressRoutes = new Hono<AppEnv>()
       const onDay = doseEvents.filter((e) => e.dueDate === date);
       return {
         date,
-        scheduled: planStart && date >= planStart ? scheduleFor(date, trainingDays) : null,
+        // What that day asked for, as the week stood that morning: the window
+        // it fell in, and only the sessions logged up to and including it.
+        scheduled:
+          planStart && date >= planStart
+            ? scheduleFor(date, trainingDays, {
+                window: windowContaining(planStart, date) ?? { from: date, to: date },
+                sessions: sessions.filter((s) => s.date <= date),
+                runsPerWeek: RUN_DAYS_PER_WEEK,
+              })
+            : null,
         sessions: (sessionsByDate.get(date) ?? []).map((session) => ({
           id: session.id,
           type: session.type,

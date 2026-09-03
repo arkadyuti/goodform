@@ -57,6 +57,13 @@
       "when": 1788033940507,
       "tag": "0007_gigantic_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788412991328,
+      "tag": "0008_cloudy_wildside",
+      "breakpoints": true
     }
   ]
 }

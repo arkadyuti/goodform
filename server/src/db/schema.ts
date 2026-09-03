@@ -246,6 +246,15 @@ export const planWeeks = pgTable(
     overriddenAt: timestamp('overridden_at', { withTimezone: true }),
     overriddenGate: text('overridden_gate'),
     completedAt: timestamp('completed_at', { withTimezone: true }),
+    /**
+     * First day of the week's current attempt. Its window runs to a Sunday.
+     *
+     * Windows used to be arithmetic on the plan's start date, so a plan begun
+     * on a Wednesday ran Wed–Tue while every screen showed Mon–Sun, and the
+     * dates only moved when a repeat was tapped. Recording the start lets a
+     * week come round again on its own. Null on rows from before the column.
+     */
+    startedOn: date('started_on'),
   },
   (t) => [primaryKey({ columns: [t.planId, t.index] })],
 );

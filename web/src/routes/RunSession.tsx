@@ -373,7 +373,7 @@ function Intervals({
     const { cues: liveCues, reps: liveReps, onDone: done } = handlers.current;
     liveCues.finish();
     void wakeRef.current?.release();
-    const completed = final ? Math.ceil(final.index / 2) : liveReps;
+    const completed = final ? final.completedReps : liveReps;
     done(final?.totalElapsed ?? 0, Math.min(completed, liveReps));
   }, []);
 
@@ -388,7 +388,7 @@ function Intervals({
         const now = Date.now();
         if (now - lastSaved.current < PROGRESS_SAVE_MS) return;
         lastSaved.current = now;
-        handlers.current.onProgress(next.totalElapsed, Math.ceil(next.index / 2));
+        handlers.current.onProgress(next.totalElapsed, next.completedReps);
       },
       onPhaseChange: (_from, to) => {
         if (!to) return;
@@ -521,7 +521,7 @@ function Intervals({
             </button>
             <button
               type="button"
-              aria-label="Skip to the next interval"
+              aria-label="Skip this interval — a skipped run does not count"
               onClick={() => timerRef.current?.skip()}
               className={`tap flex-1 rounded-2xl py-4 font-medium transition-colors ${
                 isRun
@@ -532,6 +532,16 @@ function Intervals({
               Skip
             </button>
           </div>
+        )}
+
+        {state && state.skippedReps > 0 && (
+          <p
+            className={`mt-2.5 text-center text-[0.8125rem] ${isRun ? 'text-white/75' : 'text-ink/65'}`}
+          >
+            {state.skippedReps === 1
+              ? 'One run interval skipped — it does not count towards the session.'
+              : `${state.skippedReps} run intervals skipped — they do not count towards the session.`}
+          </p>
         )}
 
         <button
