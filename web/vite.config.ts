@@ -74,7 +74,10 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'app-data',
-              networkTimeoutSeconds: 4,
+              // Four seconds handed a slow mobile link a stale copy of the plan
+              // while the server was reachable — and the plan only moves when
+              // the server is asked. Wait longer; fall back on real failure.
+              networkTimeoutSeconds: 12,
               expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 14 },
               cacheableResponse: { statuses: [200] },
             },

@@ -403,7 +403,27 @@ function Intervals({
     // has to be told its opening state. Once per prescription, not per render.
     setState(timer.state());
 
+    /**
+     * Save the moment the screen goes away, throttle or not.
+     *
+     * A locked phone stops the ticks, so the minute-by-minute save stopped with
+     * them — and a run that went into a pocket and never came back out on this
+     * screen had only whatever the last tick wrote. This is the last chance to
+     * write, and it costs one request.
+     */
+    const onHide = () => {
+      if (document.visibilityState !== 'hidden') return;
+      const now = timer.state();
+      if (now.totalElapsed <= 0 || now.finished) return;
+      lastSaved.current = Date.now();
+      handlers.current.onProgress(now.totalElapsed, now.completedReps);
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+
     return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
       timer.destroy();
       wake.destroy();
     };

@@ -30,6 +30,11 @@ export async function enqueue(write: QueuedWrite): Promise<void> {
   await db.put('queue', write);
 }
 
+export async function remove(id: string): Promise<void> {
+  const db = await database();
+  await db.delete('queue', id);
+}
+
 export async function pending(): Promise<QueuedWrite[]> {
   const db = await database();
   return (await db.getAll('queue')) as QueuedWrite[];

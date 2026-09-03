@@ -46,6 +46,20 @@ app.use(
   bodyLimit({ maxSize: 256 * 1024, onError: (c) => c.json({ error: 'Too large' }, 413) }),
 );
 
+/**
+ * One line per API request: method, path, status, duration.
+ *
+ * There was no request log anywhere — not here, not in Caddy — so when a run
+ * went missing from a phone there was no way to tell whether its writes had
+ * arrived and been rejected, or never arrived at all. No query strings, no
+ * bodies, no identities: enough to trace, nothing to leak.
+ */
+app.use('/api/*', async (c, next) => {
+  const started = Date.now();
+  await next();
+  console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${Date.now() - started}ms`);
+});
+
 // Which sign-in methods the client should offer.
 app.get('/api/config', (c) => c.json({ google: googleEnabled, devLogin: env.devLogin }));
 /**

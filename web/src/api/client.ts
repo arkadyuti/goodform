@@ -1,4 +1,4 @@
-import { enqueue, flush } from '../lib/offline.ts';
+import { enqueue, flush, remove } from '../lib/offline.ts';
 
 export class ApiError extends Error {
   constructor(
@@ -50,19 +50,27 @@ export const api = {
    * A write that must not be lost if the phone has no signal — session logs
    * and habit entries. Queued locally and replayed on reconnect.
    */
+  /**
+   * A write that must not be lost: queued to IndexedDB *before* it is sent.
+   *
+   * It used to be sent first and queued only if the send failed. That is the
+   * wrong way round for a phone: iOS suspends a locked PWA mid-request, and a
+   * suspended request neither completes nor fails — so when the app was killed
+   * from the switcher the write was in neither place. A run was lost that way.
+   * Now the queue holds it from the first instant; success removes it, a
+   * verdict the server will never change removes it too, and anything else —
+   * no signal, a bad minute, an expired session — leaves it for the sweep.
+   */
   async durable(
     path: string,
     method: 'POST' | 'PUT' | 'DELETE',
     body: unknown,
     id: string,
   ): Promise<void> {
+    await enqueue({ id, url: `/api${path}`, method, body, queuedAt: Date.now() });
     try {
       await request(path, { method, body: method === 'DELETE' ? undefined : JSON.stringify(body) });
     } catch (error) {
-      // A validation failure is the caller's problem and retrying cannot fix
-      // it, so it is raised. Everything else — no signal, a server having a
-      // bad minute, or an expired session that signing back in will cure — is
-      // queued, because the alternative is losing a session someone just ran.
       const unfixable =
         error instanceof ApiError &&
         error.status >= 400 &&
@@ -71,9 +79,11 @@ export const api = {
         error.status !== 403 &&
         error.status !== 408 &&
         error.status !== 429;
-      if (unfixable) throw error;
-      await enqueue({ id, url: `/api${path}`, method, body, queuedAt: Date.now() });
+      if (!unfixable) return;
+      await remove(id);
+      throw error;
     }
+    await remove(id);
   },
 };
 
@@ -94,9 +104,17 @@ export function startSyncWatcher(onSynced?: (count: number) => void): () => void
   };
   run();
   window.addEventListener('online', run);
+  // Coming back to the foreground is when a phone regains the network it lost
+  // in a pocket — and, with writes now queued before they are sent, when
+  // anything cut off by a lock screen gets its second chance.
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') run();
+  };
+  document.addEventListener('visibilitychange', onVisible);
   const interval = window.setInterval(run, 60_000);
   return () => {
     window.removeEventListener('online', run);
+    document.removeEventListener('visibilitychange', onVisible);
     window.clearInterval(interval);
   };
 }
