@@ -8,6 +8,8 @@ import {
   minutesOfDay,
   proteinTarget,
   scheduleFor,
+  type Completion,
+  type Prescription,
   windowFrom,
   RUN_DAYS_PER_WEEK,
   timeFromMinutes,
@@ -160,6 +162,8 @@ async function tickUser(settingsRow: SettingsRow, now: Date): Promise<void> {
         date: schema.workoutSessions.date,
         type: schema.workoutSessions.type,
         completion: schema.workoutSessions.completion,
+        intervalsCompleted: schema.workoutSessions.intervalsCompleted,
+        prescription: schema.workoutSessions.prescription,
       })
       .from(schema.workoutSessions)
       .where(
@@ -171,7 +175,11 @@ async function tickUser(settingsRow: SettingsRow, now: Date): Promise<void> {
       );
     scheduled = scheduleFor(localDate, days, {
       window,
-      sessions,
+      sessions: sessions.map((s) => ({
+        ...s,
+        completion: s.completion as Completion,
+        prescription: s.prescription as Prescription | null,
+      })),
       runsPerWeek: week?.sessionsPerWeek ?? RUN_DAYS_PER_WEEK,
     });
     sessionDue = scheduled !== 'rest' && !sessions.some((s) => s.date === localDate);

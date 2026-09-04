@@ -12,6 +12,7 @@ import {
   WITHDRAWAL_MESSAGE,
   daysClear,
   proteinTarget,
+  runCounts,
   startOfWeek,
   weekdayOf,
   type TrainingDays,
@@ -589,7 +590,7 @@ function WeekProgress({
   // "that is the week" while the review that followed said not every session
   // finished as planned — the two disagreeing about the same week.
   const attended = runsThisWeek.length;
-  const finished = runsThisWeek.filter((session) => session.completion === 'full').length;
+  const finished = runsThisWeek.filter(runCounts).length;
   const cutShort = attended - finished;
   const left = Math.max(0, runsPlanned - attended);
   return (

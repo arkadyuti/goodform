@@ -8,9 +8,12 @@ import {
   GOALS,
   STOP_REASONS,
   daysBetween,
+  attended,
   evaluateWeek,
   generatePlan,
   inWindow,
+  runCounts,
+  strengthCounts,
   windowFrom,
   STRENGTH_DAYS_PER_WEEK,
   needsFreshBaseline,
@@ -235,8 +238,8 @@ export const planRoutes = new Hono<AppEnv>()
       finished: number;
     } | null = null;
     const summarise = (runs: WorkoutSession[]) => ({
-      attempted: runs.filter((s) => s.completion !== 'skipped').length,
-      finished: runs.filter((s) => s.completion === 'full').length,
+      attempted: runs.filter(attended).length,
+      finished: runs.filter(runCounts).length,
     });
     if (week.repeats > 0) {
       let to = addDays(range.from, -1);
@@ -274,8 +277,7 @@ export const planRoutes = new Hono<AppEnv>()
     }
 
     const daysWith = (test: (s: WorkoutSession) => boolean) =>
-      new Set(sessions.filter((s) => s.completion !== 'skipped' && test(s)).map((s) => s.date))
-        .size;
+      new Set(sessions.filter(test).map((s) => s.date)).size;
 
     return c.json({
       gate,
@@ -297,8 +299,8 @@ export const planRoutes = new Hono<AppEnv>()
       quota: {
         runs: week.sessionsPerWeek,
         strength: STRENGTH_DAYS_PER_WEEK,
-        runsDone: daysWith(isRun),
-        strengthDone: daysWith((s) => s.type === 'strength'),
+        runsDone: daysWith((s) => isRun(s) && runCounts(s)),
+        strengthDone: daysWith((s) => s.type === 'strength' && strengthCounts(s)),
       },
     });
   })

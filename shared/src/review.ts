@@ -1,5 +1,6 @@
 import { dateRange } from './dates.js';
 import type { Adherence } from './regimen.js';
+import { attended, runCounts, strengthCounts } from './counting.js';
 import { reachedTheInterval } from './types.js';
 import type { DiscomfortLocation, WeeklyCheck, WorkoutSession } from './types.js';
 
@@ -85,8 +86,8 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
   const runs = inRange.filter((s) => s.type === 'run' || s.type === 'baseline');
   const strength = inRange.filter((s) => s.type === 'strength');
 
-  const completedRuns = runs.filter((s) => s.completion === 'full');
-  const attemptedRuns = runs.filter((s) => s.completion !== 'skipped');
+  const completedRuns = runs.filter(runCounts);
+  const attemptedRuns = runs.filter(attended);
 
   const longestRunSec = runs.reduce(
     (max, s) => (reachedTheInterval(s) ? Math.max(max, s.prescription?.runSec ?? 0) : max),
@@ -222,7 +223,7 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
       planned: input.plannedRuns,
     },
     strength: {
-      completed: strength.filter((s) => s.completion === 'full').length,
+      completed: strength.filter(strengthCounts).length,
       planned: input.plannedStrength,
     },
     longestRunSec,

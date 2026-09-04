@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { usePlan, useSessions, useWeekReview } from '../api/hooks.ts';
 import { shiftDays, shortDate, today } from '../lib/date.ts';
-import { windowFrom } from '@goodform/shared';
+import { runCounts, windowFrom } from '@goodform/shared';
 import { Card, Eyebrow, Note } from '../components/ui.tsx';
 import { IntervalRibbon } from '../components/IntervalRibbon.tsx';
 
@@ -73,7 +73,7 @@ export function PlanView() {
           <div className="flex items-baseline justify-between">
             <Eyebrow>This week</Eyebrow>
             <p className="tabular text-[0.8125rem] text-ink-soft">
-              {runsThisWeek.filter((s) => s.completion === 'full').length} of{' '}
+              {runsThisWeek.filter(runCounts).length} of{' '}
               {currentWeek.sessionsPerWeek} runs done
             </p>
           </div>

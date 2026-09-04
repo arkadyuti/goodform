@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './dates.js';
+export * from './counting.js';
 export * from './schedule.js';
 export * from './plan-engine/index.js';
 export * from './nutrition.js';

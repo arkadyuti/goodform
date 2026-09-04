@@ -1,4 +1,5 @@
 import type { Goal, PlanWeek, WorkoutSession } from '../types.js';
+import { runCounts } from '../counting.js';
 
 /** A stored plan week, which carries the two fields the engine does not. */
 export type TrackedWeek = PlanWeek & {
@@ -31,7 +32,7 @@ export function summariseBlock(
   weeks: TrackedWeek[],
   sessions: WorkoutSession[],
 ): BlockOutcome {
-  const runs = sessions.filter((s) => (s.type === 'run' || s.type === 'baseline') && s.completion === 'full');
+  const runs = sessions.filter((s) => (s.type === 'run' || s.type === 'baseline') && runCounts(s));
 
   let best: { runSec: number; walkSec: number; reps: number } | null = null;
   for (const session of runs) {

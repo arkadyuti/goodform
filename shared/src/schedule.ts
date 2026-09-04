@@ -1,4 +1,5 @@
 import { addDays, dateRange, weekdayOf } from './dates.js';
+import { attended, runCounts, strengthCounts, type Countable } from './counting.js';
 import { inWindow, type WeekWindow } from './plan-engine/weeks.js';
 
 export type ScheduledDay = 'run' | 'strength' | 'rest';
@@ -55,7 +56,7 @@ export const STRENGTH_DAYS_PER_WEEK = 2;
  */
 export interface WeekContext {
   window: WeekWindow;
-  sessions: { date: string; type: string; completion: string }[];
+  sessions: (Countable & { date: string; type: string })[];
   runsPerWeek: number;
   strengthPerWeek?: number;
 }
@@ -73,11 +74,18 @@ export interface WeekContext {
  * rest — including preferred days.
  */
 function askedFor(date: string, days: TrainingDays, week: WeekContext): ScheduledDay {
-  const inside = week.sessions.filter(
-    (s) => inWindow(s.date, week.window) && s.completion !== 'skipped',
-  );
-  const ran = (d: string) => inside.some((s) => s.date === d && (s.type === 'run' || s.type === 'baseline'));
+  const inside = week.sessions.filter((s) => inWindow(s.date, week.window) && attended(s));
+  const isRun = (s: { type: string }) => s.type === 'run' || s.type === 'baseline';
+  // Turned up to run that day — what decides back-to-back load, and what makes
+  // a day "a run day" once one has happened on it.
+  const ran = (d: string) => inside.some((s) => s.date === d && isRun(s));
   const lifted = (d: string) => inside.some((s) => s.date === d && s.type === 'strength');
+  // Ran enough for it to count — the same rule the week's verdict applies, so
+  // the schedule aims at a week the verdict will accept. A run cut short is
+  // still owed.
+  const ranEnough = (d: string) => inside.some((s) => s.date === d && isRun(s) && runCounts(s));
+  const liftedEnough = (d: string) =>
+    inside.some((s) => s.date === d && s.type === 'strength' && strengthCounts(s));
 
   // A day that already has a session is that kind of day, whatever was planned.
   if (ran(date)) return 'run';
@@ -85,10 +93,10 @@ function askedFor(date: string, days: TrainingDays, week: WeekContext): Schedule
 
   const daysDone = (test: (d: string) => boolean) =>
     new Set(inside.map((s) => s.date).filter(test)).size;
-  const runsLeft = Math.max(0, week.runsPerWeek - daysDone(ran));
+  const runsLeft = Math.max(0, week.runsPerWeek - daysDone(ranEnough));
   const strengthLeft = Math.max(
     0,
-    (week.strengthPerWeek ?? STRENGTH_DAYS_PER_WEEK) - daysDone(lifted),
+    (week.strengthPerWeek ?? STRENGTH_DAYS_PER_WEEK) - daysDone(liftedEnough),
   );
 
   const weekday = weekdayOf(date);
@@ -99,9 +107,11 @@ function askedFor(date: string, days: TrainingDays, week: WeekContext): Schedule
   const canRun = runsLeft > 0 && !ran(addDays(date, -1));
 
   if (days.run.includes(weekday) && canRun) return 'run';
+  // A run the preferred days left cannot hold outranks a strength day: running
+  // is what the week is judged on, and strength does not gate progression.
+  if (canRun && runDaysAhead < runsLeft) return 'run';
   if (days.strength.includes(weekday) && strengthLeft > 0) return 'strength';
   // Off-day make-up: only when the preferred days left cannot hold what is owed.
-  if (canRun && runDaysAhead < runsLeft) return 'run';
   if (strengthLeft > 0 && strengthDaysAhead < strengthLeft) return 'strength';
   return 'rest';
 }

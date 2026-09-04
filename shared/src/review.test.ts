@@ -56,7 +56,8 @@ describe('buildWeeklyReview', () => {
       input({
         sessions: [
           session(),
-          session({ id: 'b', date: '2026-08-26', completion: 'partial' }),
+          // Cut short means cut short: one of four, not four of four.
+          session({ id: 'b', date: '2026-08-26', completion: 'partial', intervalsCompleted: 1 }),
           session({ id: 'c', date: '2026-08-29', completion: 'skipped' }),
         ],
       }),

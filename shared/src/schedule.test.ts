@@ -8,8 +8,15 @@ const ctx = (sessions: WeekContext['sessions']): WeekContext => ({
   sessions,
   runsPerWeek: 3,
 });
-const run = (date: string, completion = 'full') => ({ date, type: 'run', completion });
-const lift = (date: string) => ({ date, type: 'strength', completion: 'full' });
+const run = (date: string, completion: 'full' | 'partial' | 'skipped' = 'full') => ({
+  date,
+  type: 'run',
+  completion,
+  // A partial here is a real cut-short: three of eight.
+  intervalsCompleted: completion === 'full' ? 8 : completion === 'partial' ? 3 : null,
+  prescription: { reps: 8 },
+});
+const lift = (date: string) => ({ date, type: 'strength', completion: 'full' as const });
 
 describe('scheduleFor without a week', () => {
   it('follows the rota', () => {
@@ -22,7 +29,17 @@ describe('scheduleFor without a week', () => {
 describe('scheduleFor within a week', () => {
   it('asks for the preferred session on a preferred day', () => {
     expect(scheduleFor('2026-08-31', DEFAULT_TRAINING_DAYS, ctx([]))).toBe('run');
-    expect(scheduleFor('2026-09-01', DEFAULT_TRAINING_DAYS, ctx([]))).toBe('strength');
+    // Monday's run done, so Wednesday and Saturday can hold the other two and
+    // Tuesday is free to be what it is.
+    expect(scheduleFor('2026-09-01', DEFAULT_TRAINING_DAYS, ctx([run('2026-08-31')]))).toBe(
+      'strength',
+    );
+  });
+
+  it('a run that will not otherwise fit outranks a strength day', () => {
+    // Monday missed. Wednesday and Saturday can hold two runs, not three, so
+    // Tuesday runs — the alternative is a week that fails on Sunday.
+    expect(scheduleFor('2026-09-01', DEFAULT_TRAINING_DAYS, ctx([]))).toBe('run');
   });
 
   it('is what it was once a session is logged', () => {
@@ -61,8 +78,22 @@ describe('scheduleFor within a week', () => {
     expect(scheduleFor('2026-09-03', DEFAULT_TRAINING_DAYS, two)).toBe('strength');
   });
 
-  it('the live case: two runs done, no strength, Thursday asks for strength', () => {
+  it('a run cut short is still owed', () => {
+    // Monday finished, Tuesday three of eight. One run counts, two are owed,
+    // and Saturday alone cannot hold two — so Friday runs, Saturday lifts
+    // (no run the day after one), Sunday runs.
     const c = ctx([run('2026-08-31'), run('2026-09-01', 'partial')]);
+    expect(scheduleFor('2026-09-04', DEFAULT_TRAINING_DAYS, c)).toBe('run');
+    const friday = ctx([...c.sessions, run('2026-09-04')]);
+    expect(scheduleFor('2026-09-05', DEFAULT_TRAINING_DAYS, friday)).toBe('strength');
+    const saturday = ctx([...friday.sessions, lift('2026-09-05')]);
+    expect(scheduleFor('2026-09-06', DEFAULT_TRAINING_DAYS, saturday)).toBe('run');
+  });
+
+  it('a run that nearly finished counts, as it does for the verdict', () => {
+    const nearly = { ...run('2026-09-01'), completion: 'partial' as const, intervalsCompleted: 7 };
+    const c = ctx([run('2026-08-31'), nearly]);
+    // Two count; Saturday holds the third, so Thursday is free for strength.
     expect(scheduleFor('2026-09-03', DEFAULT_TRAINING_DAYS, c)).toBe('strength');
   });
 

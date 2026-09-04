@@ -10,6 +10,8 @@ import {
   proteinTarget,
   DEFAULT_TRAINING_DAYS,
   reachedTheInterval,
+  runCounts,
+  strengthCounts,
   scheduleFor,
   windowContaining,
   RUN_DAYS_PER_WEEK,
@@ -152,15 +154,14 @@ export const progressRoutes = new Hono<AppEnv>()
      * frozen at three while the numerator climbs. The numerator, meanwhile,
      * counted baseline assessments as planned runs.
      */
-    const weeksElapsed = plan
-      ? Math.min(
-          weeks.filter((w) => w.index <= plan.currentWeek).length,
-          Math.floor(daysBetween(plan.startDate, await todayFrom(c)) / 7) + 1,
-        )
+    // Weeks the plan has actually reached, each counted once per attempt. The
+    // plan settles itself now, so "reached" is a fact rather than calendar
+    // arithmetic — and a week the plan merely waited through adds nothing.
+    const plannedRuns = plan
+      ? weeks
+          .filter((w) => w.index <= plan.currentWeek)
+          .reduce((sum, w) => sum + w.sessionsPerWeek * (1 + w.repeats), 0)
       : 0;
-    const plannedRuns = weeks
-      .filter((w) => w.index <= weeksElapsed)
-      .reduce((sum, w) => sum + w.sessionsPerWeek * (1 + w.repeats), 0);
 
     const checks = await db
       .select()
@@ -172,9 +173,9 @@ export const progressRoutes = new Hono<AppEnv>()
     return c.json({
       adherence: {
         // A baseline is a one-off assessment, not one of the planned runs.
-        runsCompleted: runs.filter((s) => s.type === 'run' && s.completion === 'full').length,
+        runsCompleted: runs.filter((s) => s.type === 'run' && runCounts(toSession(s))).length,
         runsPlanned: plannedRuns,
-        strengthCompleted: strength.filter((s) => s.completion === 'full').length,
+        strengthCompleted: strength.filter((s) => strengthCounts(toSession(s))).length,
       },
       longestRunSec,
       discomfort,
@@ -228,11 +229,9 @@ export const progressRoutes = new Hono<AppEnv>()
       const week = startOfWeek(session.date);
       if (session.type === 'run' || session.type === 'baseline') {
         const runSec = (session.prescription as { runSec?: number } | null)?.runSec ?? 0;
-        // A partial session still reached the interval if it finished any of
-        // them; one that got through none of them reached nothing.
-        const reached = session.completion === 'full' || (session.intervalsCompleted ?? 0) > 0;
+        const reached = reachedTheInterval(toSession(session));
         if (reached) runsByWeek.set(week, Math.max(runsByWeek.get(week) ?? 0, runSec));
-      } else if (session.type === 'strength' && session.completion === 'full') {
+      } else if (session.type === 'strength' && strengthCounts(toSession(session))) {
         strengthByWeek.set(week, (strengthByWeek.get(week) ?? 0) + 1);
       }
     }
@@ -489,7 +488,7 @@ export const progressRoutes = new Hono<AppEnv>()
           planStart && date >= planStart
             ? scheduleFor(date, trainingDays, {
                 window: windowContaining(planStart, date) ?? { from: date, to: date },
-                sessions: sessions.filter((s) => s.date <= date),
+                sessions: sessions.filter((s) => s.date <= date).map(toSession),
                 runsPerWeek: RUN_DAYS_PER_WEEK,
               })
             : null,

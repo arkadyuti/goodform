@@ -1,28 +1,10 @@
+import { NEARLY_ALL, fractionDone } from '../counting.js';
 import type { GateResult, PlanWeek, WorkoutSession } from '../types.js';
 
 /**
  * PRD FR-3.2. Decides what happens after a week of running, from what was
  * actually logged. Repeating is a first-class outcome, never a failure state.
  */
-/**
- * How much of a session was actually done, 0–1.
- *
- * A session cut short at six of seven intervals is not the same as one cut
- * short at one, and the gate used to treat them identically — `partial` counted
- * for exactly nothing. That is how a runner doing most of the work every time
- * got told, week after week, that not every session finished as planned.
- */
-function fractionDone(session: WorkoutSession): number {
-  if (session.completion === 'full') return 1;
-  if (session.completion === 'skipped') return 0;
-  const reps = session.prescription?.reps ?? 0;
-  if (!reps || session.intervalsCompleted === null) return 0;
-  return Math.min(1, session.intervalsCompleted / reps);
-}
-
-/** Close enough to the prescription to count as having done the week. */
-const NEARLY_ALL = 0.8;
-
 /** Consistently below this, after repeating, means the week is too big. */
 const TOO_HARD = 0.7;
 
